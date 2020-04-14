@@ -1,10 +1,10 @@
-from typing import List, NewType, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from django.conf import settings
 from django.db.migrations import DeleteModel, Migration, RemoveField
 from django.db.migrations.operations.base import Operation
 
-Plan = NewType("Plan", List[Tuple[Migration, bool]])
+Plan = List[Tuple[Migration, bool]]
 
 
 def must_postpone_operation(
@@ -63,7 +63,7 @@ def get_prerequisite_plan(plan: Plan) -> Plan:
     If the plan contains non-contiguous sequence of prerequisite migrations
     or migrations with ambiguous prerequisite nature a `ValueError` is raised.
     """
-    prerequisite_plan = []
+    prerequisite_plan: Plan = []
     postpone = False
     for migration, backward in plan:
         if must_postpone_migration(migration, backward):
