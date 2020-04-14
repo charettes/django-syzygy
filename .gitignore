@@ -1,0 +1,6 @@
+syntax:glob
+*.py[co]
+dist/
+*.egg-info/*
+.coverage
+.tox
