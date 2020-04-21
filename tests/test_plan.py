@@ -1,62 +1,115 @@
+from django.conf import settings
 from django.db.migrations import CreateModel, DeleteModel, Migration
 from django.db.migrations.operations.fields import RemoveField
 from django.test import SimpleTestCase
 
-from syzygy.plan import must_postpone_migration, must_postpone_operation
+from syzygy.constants import Stage
+from syzygy.plan import (
+    get_migration_stage,
+    get_operation_stage,
+    get_pre_deploy_plan,
+    must_post_deploy_migration,
+)
 
 
-class MustPostponeOperationTests(SimpleTestCase):
-    def test_postpone_operations(self):
-        operations = [DeleteModel("model"), RemoveField("model", "field")]
-        for operation in operations:
-            with self.subTest(operation=operation):
-                self.assertIs(True, must_postpone_operation(operation))
-                self.assertIs(False, must_postpone_operation(operation, backward=True))
-
-    def test_prerequisite_operations(self):
+class GetOperationStageTests(SimpleTestCase):
+    def test_pre_deploy_operations(self):
         operations = [CreateModel("model", [])]
         for operation in operations:
             with self.subTest(operation=operation):
-                self.assertIs(False, must_postpone_operation(operation))
-                self.assertIs(True, must_postpone_operation(operation, backward=True))
+                self.assertIs(get_operation_stage(operation), Stage.PRE_DEPLOY)
+
+    def test_post_deploy_operations(self):
+        operations = [DeleteModel("model"), RemoveField("model", "field")]
+        for operation in operations:
+            with self.subTest(operation=operation):
+                self.assertIs(get_operation_stage(operation), Stage.POST_DEPLOY)
 
 
-class MustPostponeMigrationTests(SimpleTestCase):
-    def test_pospone_attribute(self):
-        class PostponedTrueMigration(Migration):
-            postpone = True
+class GetMigrationStageTests(SimpleTestCase):
+    def setUp(self):
+        self.migration = Migration(app_label="tests", name="migration")
 
-        migration = PostponedTrueMigration("tests", "migration")
-        self.assertIs(True, must_postpone_migration(migration))
-        self.assertIs(False, must_postpone_migration(migration, backward=True))
+    def test_stage_setting(self):
+        with self.settings():
+            del settings.MIGRATION_STAGES
+            self.assertIsNone(get_migration_stage(self.migration))
 
-        class PostponedFalseMigration(Migration):
-            postpone = False
+        for stage in Stage:
+            with self.subTest(stage=stage), self.settings(
+                MIGRATION_STAGES={"tests.migration": stage}
+            ):
+                self.assertIs(get_migration_stage(self.migration), stage)
 
-        migration = PostponedFalseMigration("tests", "migration")
-        self.assertIs(False, must_postpone_migration(migration))
-        self.assertIs(True, must_postpone_migration(migration, backward=True))
+    def test_stage_attribute(self):
+        for stage in Stage:
+            with self.subTest(stage=stage):
+                self.migration.stage = stage
+                self.assertIs(get_migration_stage(self.migration), stage)
 
-    def test_no_operations_never_postponed(self):
-        class PostponedMigration(Migration):
-            operations = []
+    def test_operations_stages(self):
+        self.assertIsNone(get_migration_stage(self.migration))
 
-        migration = PostponedMigration("tests", "migration")
-        self.assertIs(False, must_postpone_migration(migration))
-        self.assertIs(False, must_postpone_migration(migration, backward=True))
+        self.migration.operations = [CreateModel("model", [])]
+        self.assertEqual(get_migration_stage(self.migration), Stage.PRE_DEPLOY)
 
-    def test_postpone_by_operations(self):
-        class PostponedMigration(Migration):
-            operations = [DeleteModel("model"), RemoveField("model", "field")]
-
-        migration = PostponedMigration("tests", "migration")
-        self.assertIs(True, must_postpone_migration(migration))
-        self.assertIs(False, must_postpone_migration(migration, backward=True))
+        self.migration.operations = [
+            DeleteModel("model"),
+            RemoveField("model", "field"),
+        ]
+        self.assertEqual(get_migration_stage(self.migration), Stage.POST_DEPLOY)
 
     def test_ambiguous_operations(self):
-        class AmgiguousOperationsMigration(Migration):
-            operations = [CreateModel("foo", fields=[]), DeleteModel("bar")]
-
-        migration = AmgiguousOperationsMigration("tests", "migration")
+        self.migration.operations = [CreateModel("model", []), DeleteModel("model")]
         with self.assertRaises(ValueError):
-            must_postpone_migration(migration)
+            get_migration_stage(self.migration)
+
+
+class MustPostDeployMigrationTests(SimpleTestCase):
+    def setUp(self):
+        self.migration = Migration(app_label="tests", name="migration")
+
+    def test_forward(self):
+        self.assertIsNone(must_post_deploy_migration(self.migration))
+        self.migration.stage = Stage.PRE_DEPLOY
+        self.assertIs(must_post_deploy_migration(self.migration), False)
+        self.migration.stage = Stage.POST_DEPLOY
+        self.assertIs(must_post_deploy_migration(self.migration), True)
+
+    def test_backward(self):
+        self.migration.stage = Stage.PRE_DEPLOY
+        self.assertIs(must_post_deploy_migration(self.migration, True), True)
+        self.migration.stage = Stage.POST_DEPLOY
+        self.assertIs(must_post_deploy_migration(self.migration, True), False)
+
+    def test_ambiguous_operations(self):
+        self.migration.operations = [CreateModel("model", []), DeleteModel("model")]
+        with self.assertRaises(ValueError):
+            must_post_deploy_migration(self.migration)
+
+
+class GetPreDeployPlanTests(SimpleTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.pre_deploy = Migration(app_label="tests", name="0001")
+        cls.pre_deploy.stage = Stage.PRE_DEPLOY
+        cls.post_deploy = Migration(app_label="tests", name="0002")
+        cls.post_deploy.stage = Stage.POST_DEPLOY
+
+    def test_forward(self):
+        plan = [(self.pre_deploy, False), (self.post_deploy, False)]
+        self.assertEqual(get_pre_deploy_plan(plan), [(self.pre_deploy, False)])
+
+    def test_backward(self):
+        plan = [(self.post_deploy, True), (self.pre_deploy, True)]
+        self.assertEqual(get_pre_deploy_plan(plan), [(self.post_deploy, True)])
+
+    def test_non_contiguous(self):
+        plan = [
+            (self.pre_deploy, False),
+            (self.post_deploy, False),
+            (self.pre_deploy, False),
+        ]
+        with self.assertRaises(ValueError):
+            get_pre_deploy_plan(plan)
