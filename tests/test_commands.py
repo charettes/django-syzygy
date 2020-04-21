@@ -1,10 +1,15 @@
+from io import StringIO
+
 from django.core.management import CommandError, call_command
 from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 
 
 class MigrateTests(TransactionTestCase):
+    def tearDown(self):
+        MigrationRecorder(connection).flush()
+
     def get_applied_migrations(self):
         return {
             name
@@ -15,27 +20,29 @@ class MigrateTests(TransactionTestCase):
     def assert_not_applied(self, name):
         self.assertIn(("tests", name), self.recorder.applied_migrations())
 
+    @override_settings(MIGRATION_MODULES={"tests": "tests.test_migrations.functional"})
     def test_pre_deploy_forward(self):
-        with self.settings(
-            MIGRATION_MODULES={"tests": "tests.test_migrations.functional"}
-        ):
-            call_command("migrate", "tests", pre_deploy=True, verbosity=0)
+        stdout = StringIO()
+        call_command("migrate", "tests", plan=True, no_color=True, pre_deploy=True, stdout=stdout)
+        self.assertIn('tests.0001_pre_deploy', stdout.getvalue())
+        self.assertNotIn('tests.0002_post_deploy', stdout.getvalue())
+        call_command("migrate", "tests", pre_deploy=True, verbosity=0)
         self.assertEqual(self.get_applied_migrations(), {"0001_pre_deploy"})
 
+    @override_settings(MIGRATION_MODULES={"tests": "tests.test_migrations.functional"})
     def test_pre_deploy_backward(self):
-        with self.settings(
-            MIGRATION_MODULES={"tests": "tests.test_migrations.functional"}
-        ):
-            call_command("migrate", "tests", verbosity=0)
-            self.assertEqual(
-                self.get_applied_migrations(), {"0001_pre_deploy", "0002_post_deploy"}
-            )
-            call_command("migrate", "tests", "zero", pre_deploy=True, verbosity=0)
-            self.assertEqual(self.get_applied_migrations(), {"0001_pre_deploy"})
+        call_command("migrate", "tests", verbosity=0)
+        self.assertEqual(
+            self.get_applied_migrations(), {"0001_pre_deploy", "0002_post_deploy"}
+        )
+        stdout = StringIO()
+        call_command("migrate", "tests", "zero", plan=True, no_color=True, pre_deploy=True, stdout=stdout)
+        self.assertIn('tests.0002_post_deploy', stdout.getvalue())
+        self.assertNotIn('tests.0001_pre_deploy', stdout.getvalue())
+        call_command("migrate", "tests", "zero", pre_deploy=True, verbosity=0)
+        self.assertEqual(self.get_applied_migrations(), {"0001_pre_deploy"})
 
+    @override_settings(MIGRATION_MODULES={"tests": "tests.test_migrations.ambiguous"})
     def test_ambiguous(self):
-        with self.settings(
-            MIGRATION_MODULES={"tests": "tests.test_migrations.ambiguous"}
-        ):
-            with self.assertRaisesMessage(CommandError, 'Cannot automatically determine stage of tests.0001_initial.'):
-                call_command("migrate", "tests", pre_deploy=True, verbosity=0)
+        with self.assertRaisesMessage(CommandError, 'Cannot automatically determine stage of tests.0001_initial.'):
+            call_command("migrate", "tests", pre_deploy=True, verbosity=0)
