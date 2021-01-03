@@ -1,9 +1,10 @@
 from io import StringIO
 
+import django
 from django.core.management import CommandError, call_command
 from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
-from django.test import TransactionTestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 
 
 class MigrateTests(TransactionTestCase):
@@ -23,9 +24,11 @@ class MigrateTests(TransactionTestCase):
     @override_settings(MIGRATION_MODULES={"tests": "tests.test_migrations.functional"})
     def test_pre_deploy_forward(self):
         stdout = StringIO()
-        call_command("migrate", "tests", plan=True, no_color=True, pre_deploy=True, stdout=stdout)
-        self.assertIn('tests.0001_pre_deploy', stdout.getvalue())
-        self.assertNotIn('tests.0002_post_deploy', stdout.getvalue())
+        call_command(
+            "migrate", "tests", plan=True, no_color=True, pre_deploy=True, stdout=stdout
+        )
+        self.assertIn("tests.0001_pre_deploy", stdout.getvalue())
+        self.assertNotIn("tests.0002_post_deploy", stdout.getvalue())
         call_command("migrate", "tests", pre_deploy=True, verbosity=0)
         self.assertEqual(self.get_applied_migrations(), {"0001_pre_deploy"})
 
@@ -36,13 +39,42 @@ class MigrateTests(TransactionTestCase):
             self.get_applied_migrations(), {"0001_pre_deploy", "0002_post_deploy"}
         )
         stdout = StringIO()
-        call_command("migrate", "tests", "zero", plan=True, no_color=True, pre_deploy=True, stdout=stdout)
-        self.assertIn('tests.0002_post_deploy', stdout.getvalue())
-        self.assertNotIn('tests.0001_pre_deploy', stdout.getvalue())
+        call_command(
+            "migrate",
+            "tests",
+            "zero",
+            plan=True,
+            no_color=True,
+            pre_deploy=True,
+            stdout=stdout,
+        )
+        self.assertIn("tests.0002_post_deploy", stdout.getvalue())
+        self.assertNotIn("tests.0001_pre_deploy", stdout.getvalue())
         call_command("migrate", "tests", "zero", pre_deploy=True, verbosity=0)
         self.assertEqual(self.get_applied_migrations(), {"0001_pre_deploy"})
 
     @override_settings(MIGRATION_MODULES={"tests": "tests.test_migrations.ambiguous"})
     def test_ambiguous(self):
-        with self.assertRaisesMessage(CommandError, 'Cannot automatically determine stage of tests.0001_initial.'):
+        with self.assertRaisesMessage(
+            CommandError, "Cannot automatically determine stage of tests.0001_initial."
+        ):
             call_command("migrate", "tests", pre_deploy=True, verbosity=0)
+
+
+class MakeMigrationsTests(TestCase):
+    @override_settings(
+        MIGRATION_MODULES={"tests": "tests.test_migrations.null_field_removal"}
+    )
+    def test_null_field_removal(self):
+        stdout = StringIO()
+        call_command(
+            "makemigrations", "tests", no_color=True, dry_run=True, stdout=stdout
+        )
+        output = stdout.getvalue()
+        if django.VERSION >= (3, 2):
+            self.assertIn("null_field_removal/0002_alter_foo_bar.py", output)
+        else:
+            self.assertIn("null_field_removal/0002_auto", output)
+        self.assertIn("- Alter field bar on foo", output)
+        self.assertIn("null_field_removal/0003_remove_foo_bar.py", output)
+        self.assertIn("- Remove field bar from foo", output)
