@@ -9,6 +9,10 @@ python:
 stages:
   - lint
   - test
+services:
+  - postgresql
+env:
+  - DB_PASSWORD=
 jobs:
   fast_finish: true
   include:
