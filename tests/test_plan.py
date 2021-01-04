@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db.migrations import CreateModel, DeleteModel, Migration
+from django.db.migrations.operations.base import Operation
 from django.db.migrations.operations.fields import RemoveField
 from django.test import SimpleTestCase
 
@@ -14,13 +15,21 @@ from syzygy.plan import (
 
 class GetOperationStageTests(SimpleTestCase):
     def test_pre_deploy_operations(self):
-        operations = [CreateModel("model", [])]
+        pre_deploy_operation = Operation()
+        pre_deploy_operation.stage = Stage.PRE_DEPLOY
+        operations = [CreateModel("model", []), pre_deploy_operation]
         for operation in operations:
             with self.subTest(operation=operation):
                 self.assertIs(get_operation_stage(operation), Stage.PRE_DEPLOY)
 
     def test_post_deploy_operations(self):
-        operations = [DeleteModel("model"), RemoveField("model", "field")]
+        post_deploy_operation = Operation()
+        post_deploy_operation.stage = Stage.POST_DEPLOY
+        operations = [
+            DeleteModel("model"),
+            RemoveField("model", "field"),
+            post_deploy_operation,
+        ]
         for operation in operations:
             with self.subTest(operation=operation):
                 self.assertIs(get_operation_stage(operation), Stage.POST_DEPLOY)

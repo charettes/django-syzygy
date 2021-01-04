@@ -12,6 +12,12 @@ Plan = List[Tuple[Migration, bool]]
 
 def get_operation_stage(operation: Operation) -> Stage:
     """Return the heuristically determined `Stage` of the operation."""
+    try:
+        stage = operation.stage  # type: ignore
+    except AttributeError:
+        pass
+    else:
+        return Stage(stage)
     if isinstance(operation, (DeleteModel, RemoveField)):
         return Stage.POST_DEPLOY
     return Stage.PRE_DEPLOY
