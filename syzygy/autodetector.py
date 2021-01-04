@@ -8,7 +8,7 @@ from django.db.migrations.autodetector import (
 from django.db.migrations.operations.base import Operation
 from django.db.models.fields import NOT_PROVIDED
 
-from syzygy.operations import PreRemoveField
+from syzygy.operations import AddField, PostAddField, PreRemoveField
 
 
 class Stage(Operation):
@@ -46,6 +46,24 @@ class MigrationAutodetector(_MigrationAutodetector):
     """
 
     STAGE_SPLIT = "__stage__"
+
+    def _generate_added_field(self, app_label, model_name, field_name):
+        super()._generate_added_field(app_label, model_name, field_name)
+        add_field = self.generated_operations[app_label][-1]
+        add_field.__class__ = AddField
+        stage = Stage()
+        self.add_operation(
+            self.STAGE_SPLIT,
+            stage,
+            dependencies=[(app_label, self.STAGE_SPLIT, add_field)],
+        )
+        self.add_operation(
+            app_label,
+            PostAddField(model_name=model_name, name=field_name, field=add_field.field),
+            dependencies=[
+                (self.STAGE_SPLIT, stage),
+            ],
+        )
 
     def _generate_removed_field(self, app_label, model_name, field_name):
         if django.VERSION >= (3, 1):

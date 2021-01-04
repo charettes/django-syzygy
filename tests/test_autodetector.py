@@ -6,7 +6,7 @@ from django.test import TestCase
 
 from syzygy.autodetector import MigrationAutodetector
 from syzygy.constants import Stage
-from syzygy.operations import PreRemoveField
+from syzygy.operations import AddField, PostAddField, PreRemoveField
 from syzygy.plan import get_migration_stage
 
 
@@ -21,10 +21,28 @@ class AutodetectorTests(TestCase):
     def get_changes(
         self, before_states: List[ModelState], after_states: List[ModelState]
     ) -> List[migrations.Migration]:
-        return MigrationAutodetector(
+        changes = MigrationAutodetector(
             self.make_project_state(before_states),
             self.make_project_state(after_states),
         )._detect_changes()
+        self.assertNotIn(MigrationAutodetector.STAGE_SPLIT, changes)
+        return changes
+
+    def test_field_addition(self):
+        from_model = ModelState("tests", "Model", [])
+        to_model = ModelState(
+            "tests", "Model", [("field", models.IntegerField(default=42))]
+        )
+        changes = self.get_changes([from_model], [to_model])["tests"]
+        self.assertEqual(len(changes), 2)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        self.assertEqual(changes[0].dependencies, [])
+        self.assertEqual(len(changes[0].operations), 1)
+        self.assertIsInstance(changes[0].operations[0], AddField)
+        self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
+        self.assertEqual(changes[1].dependencies, [("tests", "auto_1")])
+        self.assertEqual(len(changes[1].operations), 1)
+        self.assertIsInstance(changes[1].operations[0], PostAddField)
 
     def _test_field_removal(self, field):
         from_model = ModelState("tests", "Model", [("field", field)])
