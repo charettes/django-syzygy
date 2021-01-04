@@ -12,6 +12,8 @@ class PreRemoveField(migrations.AlterField):
     NULL'able if it's not already.
     """
 
+    elidable = True
+
     def database_forwards(self, app_label, schema_editor, from_state, to_state):
         model = to_state.apps.get_model(app_label, self.model_name)
         if not self.allow_migrate_model(schema_editor.connection.alias, model):

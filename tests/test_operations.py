@@ -2,6 +2,7 @@ from typing import List
 
 from django.db import connection, migrations, models
 from django.db.migrations.operations.base import Operation
+from django.db.migrations.optimizer import MigrationOptimizer
 from django.db.migrations.state import ProjectState
 from django.test import TestCase
 
@@ -70,3 +71,27 @@ class PreRemoveFieldTests(TestCase):
             self.assertIsNone(pre_model.objects.get().foo)
         else:
             self.assertEqual(pre_model.objects.get().foo, 42)
+
+    def assert_optimizes_to(
+        self, operations: List[Operation], expected: List[Operation]
+    ):
+        optimized = MigrationOptimizer().optimize(operations, "tests")
+        self.assertEqual(
+            [operation.deconstruct() for operation in optimized],
+            [operation.deconstruct() for operation in expected],
+        )
+
+    def test_elidable(self):
+        model_name = "TestModel"
+        field_name = "foo"
+        field = models.IntegerField(default=42)
+        operations = [
+            migrations.CreateModel(model_name, [(field_name, field)]),
+            PreRemoveField(
+                model_name,
+                field_name,
+                field,
+            ),
+            migrations.RemoveField(model_name, field_name, field),
+        ]
+        self.assert_optimizes_to(operations, [migrations.CreateModel(model_name, [])])
