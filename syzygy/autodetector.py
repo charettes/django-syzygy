@@ -6,6 +6,9 @@ from django.db.migrations.autodetector import (
     MigrationAutodetector as _MigrationAutodetector,
 )
 from django.db.migrations.operations.base import Operation
+from django.db.models.fields import NOT_PROVIDED
+
+from syzygy.operations import PreRemoveField
 
 
 class Stage(Operation):
@@ -46,26 +49,16 @@ class MigrationAutodetector(_MigrationAutodetector):
 
     def _generate_removed_field(self, app_label, model_name, field_name):
         if django.VERSION >= (3, 1):
-            removed_field = self.from_state.models[app_label, model_name].fields[
-                field_name
-            ]
+            field = self.from_state.models[app_label, model_name].fields[field_name]
         else:
             for fname, field in self.from_state.models[app_label, model_name].fields:
                 if fname == field_name:
-                    removed_field = field
                     break
-        if removed_field.null:
-            super()._generate_removed_field(app_label, model_name, field_name)
-            return
-        # Ensure removed fields are NULL'able before removal to allow INSERT
-        # during the deployment stage.
-        nullable_field = removed_field.clone()
-        nullable_field.null = True
+        if field.default is NOT_PROVIDED and field.null:
+            return super()._generate_removed_field(app_label, model_name, field_name)
         self.add_operation(
             app_label,
-            operations.AlterField(
-                model_name=model_name, name=field_name, field=nullable_field
-            ),
+            PreRemoveField(model_name=model_name, name=field_name, field=field),
         )
         stage = Stage()
         self.add_operation(
