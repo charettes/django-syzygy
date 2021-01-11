@@ -6,7 +6,7 @@ from django.core.checks import Error
 from django.db.migrations.loader import MigrationLoader
 from django.utils.module_loading import import_string
 
-from syzygy.plan import must_post_deploy_migration
+from .plan import must_post_deploy_migration
 
 
 def check_migrations(app_configs, **kwargs):

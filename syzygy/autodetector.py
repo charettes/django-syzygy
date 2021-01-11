@@ -8,7 +8,7 @@ from django.db.migrations.autodetector import (
 from django.db.migrations.operations.base import Operation
 from django.db.models.fields import NOT_PROVIDED
 
-from syzygy.operations import AddField, PostAddField, PreRemoveField
+from .operations import AddField, PostAddField, PreRemoveField
 
 
 class Stage(Operation):

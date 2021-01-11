@@ -1,7 +1,7 @@
 from django.apps import AppConfig
 from django.core import checks
 
-from syzygy.checks import check_migrations
+from .checks import check_migrations
 
 
 class SyzygyConfig(AppConfig):

@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from django.db import migrations
 from django.db.models.fields import NOT_PROVIDED
 
-from syzygy.constants import Stage
+from .constants import Stage
 
 
 def _alter_field_db_default_sql_params(schema_editor, model, name, drop=False):
