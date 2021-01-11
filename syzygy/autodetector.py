@@ -9,6 +9,7 @@ from django.db.migrations.operations.base import Operation
 from django.db.models.fields import NOT_PROVIDED
 
 from .operations import AddField, PostAddField, PreRemoveField
+from .plan import partition_operations
 
 
 class Stage(Operation):
@@ -106,6 +107,20 @@ class MigrationAutodetector(_MigrationAutodetector):
         return super().check_dependency(operation, dependency)
 
     def _build_migration_list(self, *args, **kwargs):
+        # Ensure generated operations sequence for each apps are partitioned
+        # by stage.
+        for app_label, app_operations in list(self.generated_operations.items()):
+            if app_label == self.STAGE_SPLIT:
+                continue
+            pre_operations, post_operations = partition_operations(app_operations)
+            if pre_operations and post_operations:
+                stage = Stage()
+                self.add_operation(
+                    self.STAGE_SPLIT,
+                    stage,
+                    dependencies=[(app_label, self.STAGE_SPLIT, pre_operations[-1])],
+                )
+                post_operations[0]._auto_deps.append((self.STAGE_SPLIT, stage))
         super()._build_migration_list(*args, **kwargs)
         # Remove all dangling references to stage migrations.
         if self.migrations.pop(self.STAGE_SPLIT, None):

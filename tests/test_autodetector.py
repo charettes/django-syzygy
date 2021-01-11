@@ -80,3 +80,27 @@ class AutodetectorTests(TestCase):
         changes = self.get_changes([from_model], [to_model])["tests"]
         self.assertEqual(len(changes), 1)
         self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
+
+    def test_mixed_stage_same_app(self):
+        from_models = [
+            ModelState(
+                "tests", "Model", [("field", models.IntegerField(primary_key=True))]
+            )
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "OtherModel",
+                [("field", models.IntegerField(primary_key=True))],
+            )
+        ]
+        changes = self.get_changes(from_models, to_models)["tests"]
+        self.assertEqual(len(changes), 2)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        self.assertEqual(changes[0].dependencies, [])
+        self.assertEqual(len(changes[0].operations), 1)
+        self.assertIsInstance(changes[0].operations[0], migrations.CreateModel)
+        self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
+        self.assertEqual(changes[1].dependencies, [("tests", "auto_1")])
+        self.assertEqual(len(changes[1].operations), 1)
+        self.assertIsInstance(changes[1].operations[0], migrations.DeleteModel)

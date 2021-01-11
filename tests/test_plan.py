@@ -5,11 +5,13 @@ from django.db.migrations.operations.fields import RemoveField
 from django.test import SimpleTestCase
 
 from syzygy.constants import Stage
+from syzygy.exceptions import AmbiguousStage
 from syzygy.plan import (
     get_migration_stage,
     get_operation_stage,
     get_pre_deploy_plan,
     must_post_deploy_migration,
+    partition_operations,
 )
 
 
@@ -33,6 +35,44 @@ class GetOperationStageTests(SimpleTestCase):
         for operation in operations:
             with self.subTest(operation=operation):
                 self.assertIs(get_operation_stage(operation), Stage.POST_DEPLOY)
+
+
+class PartitionOperationsTests(SimpleTestCase):
+    pre_deploy_operations = [
+        CreateModel("model", []),
+    ]
+    post_deploy_operations = [
+        DeleteModel("model"),
+    ]
+
+    def test_empty(self):
+        self.assertEqual(partition_operations([]), ([], []))
+
+    def test_pre_deploy_only(self):
+        self.assertEqual(
+            partition_operations(self.pre_deploy_operations),
+            (self.pre_deploy_operations, []),
+        )
+
+    def test_post_deploy_only(self):
+        self.assertEqual(
+            partition_operations(self.post_deploy_operations),
+            ([], self.post_deploy_operations),
+        )
+
+    def test_mixed(self):
+        self.assertEqual(
+            partition_operations(
+                self.pre_deploy_operations + self.post_deploy_operations
+            ),
+            (self.pre_deploy_operations, self.post_deploy_operations),
+        )
+
+    def test_ambiguous(self):
+        with self.assertRaises(AmbiguousStage):
+            partition_operations(
+                self.post_deploy_operations + self.pre_deploy_operations
+            )
 
 
 class GetMigrationStageTests(SimpleTestCase):

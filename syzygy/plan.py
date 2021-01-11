@@ -24,6 +24,32 @@ def get_operation_stage(operation: Operation) -> Stage:
     return Stage.PRE_DEPLOY
 
 
+def partition_operations(
+    operations: List[Operation],
+) -> Tuple[List[Operation], List[Operation]]:
+    """
+    Partition an ordered list of operations by :class:`syzygy.constants.Stage`.
+
+    If `operations` is composed of members with a :attr:`syzygy.constants.Stage.PRE_DEPLOY`
+    stage after members with a :attr:`syzygy.constants.Stage.PRE_DEPLOY` stage
+    a :class:`syzygy.exceptions.AmbiguousStage` exception will be raised.
+    """
+    stage_operations: Dict[Stage, List[Operation]] = {
+        Stage.PRE_DEPLOY: [],
+        Stage.POST_DEPLOY: [],
+    }
+    current_stage = Stage.PRE_DEPLOY
+    for operation in operations:
+        operation_stage = get_operation_stage(operation)
+        if operation_stage is Stage.PRE_DEPLOY and current_stage is Stage.POST_DEPLOY:
+            raise AmbiguousStage(
+                "Post-deployment operations cannot be followed by pre-deployments operations"
+            )
+        stage_operations[operation_stage].append(operation)
+        current_stage = operation_stage
+    return stage_operations[Stage.PRE_DEPLOY], stage_operations[Stage.POST_DEPLOY]
+
+
 def _get_configured_migration_stage(migration: Migration) -> Optional[Stage]:
     """Return the `Stage` configured through setting:`MIGRATION_STAGES` of the migration."""
     setting: MigrationStagesSetting = getattr(settings, "MIGRATION_STAGES", None)
