@@ -5,6 +5,7 @@ from django.db.migrations import DeleteModel, Migration, RemoveField
 from django.db.migrations.operations.base import Operation
 
 from .constants import Stage
+from .exceptions import AmbiguousPlan, AmbiguousStage
 
 MigrationStagesSetting = Dict[str, Stage]
 Plan = List[Tuple[Migration, bool]]
@@ -41,8 +42,8 @@ def get_migration_stage(migration: Migration) -> Optional[Stage]:
     attr:`django.db.migrations.Migration.operations`.
 
     If the migration doesn't have any `operations` then `None` will be returned
-    and a `ValueError` will be raised if its contains operations of different
-    stages.
+    and a :class:`syzygy.exceptions.AmbiguousStage` exception will be raised
+    if it contains operations of mixed stages.
     """
     stage = getattr(migration, "stage", None) or _get_configured_migration_stage(
         migration
@@ -54,7 +55,9 @@ def get_migration_stage(migration: Migration) -> Optional[Stage]:
         if stage is None:
             stage = operation_stage
         elif operation_stage != stage:
-            raise ValueError(f"Cannot automatically determine stage of {migration}.")
+            raise AmbiguousStage(
+                f"Cannot automatically determine stage of {migration}."
+            )
     return stage
 
 
@@ -68,7 +71,8 @@ def must_post_deploy_migration(
     class attribute it will be tentatively deduced from its list of
     attr:`django.db.migrations.Migration.operations`.
 
-    In cases of ambiguity a `ValueError` will be raised.
+    In cases of ambiguity a :class:`syzygy.exceptions.AmbiguousStage` exception
+    will be raised.
     """
     migration_stage = get_migration_stage(migration)
     if migration_stage is None:
@@ -83,7 +87,8 @@ def get_pre_deploy_plan(plan: Plan) -> Plan:
     Trim provided plan to its leading contiguous pre-deployment sequence.
 
     If the plan contains non-contiguous sequence of pre-deployment migrations
-    or migrations with ambiguous deploy stage a `ValueError` is raised.
+    or migrations with ambiguous deploy stage a :class:`syzygy.exceptions.AmbiguousPlan`
+    exception is raised.
     """
     pre_deploy_plan: Plan = []
     post_deploy = False
@@ -92,7 +97,7 @@ def get_pre_deploy_plan(plan: Plan) -> Plan:
             post_deploy = True
         else:
             if post_deploy:
-                raise ValueError(
+                raise AmbiguousPlan(
                     "Plan contains a non-contiguous sequence of pre-deployment "
                     "migrations."
                 )
