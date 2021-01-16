@@ -9,3 +9,5 @@ DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3"}}
 INSTALLED_APPS = ["syzygy", "tests"]
 
 SYZYGY_POSTPONE: Dict[Tuple[str, str], bool] = {}
+
+DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
