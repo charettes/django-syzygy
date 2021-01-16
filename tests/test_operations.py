@@ -204,11 +204,7 @@ class PreRemoveFieldTests(OperationTestCase):
         remove_field.state_forwards("tests", state)
         post_model = state.apps.get_model("tests", model_name)
         post_model.objects.create()
-        if connection.vendor == "sqlite":
-            # Not implemented on SQLite due to the lack of ALTER TABLE support.
-            self.assertIsNone(pre_model.objects.get().foo)
-        else:
-            self.assertEqual(pre_model.objects.get().foo, 42)
+        self.assertEqual(pre_model.objects.get().foo, 42)
 
     def test_elidable(self):
         model_name = "TestModel"

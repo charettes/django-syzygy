@@ -56,7 +56,12 @@ class PreRemoveField(migrations.AlterField):
 
     elidable = True
 
+    def state_forwards(self, app_label, state):
+        pass
+
     def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        to_state = to_state.clone()
+        super().state_forwards(app_label, to_state)
         model = to_state.apps.get_model(app_label, self.model_name)
         if not self.allow_migrate_model(schema_editor.connection.alias, model):
             return
@@ -64,14 +69,14 @@ class PreRemoveField(migrations.AlterField):
         # or is made NULL'able prior to removal to allow INSERT during the
         # deployment stage.
         field = model._meta.get_field(self.name)
-        if (
-            field.default is not NOT_PROVIDED
-            # XXX: Not implemented on SQLite because of the lack of ALTER TABLE
-            # support which would require considerable changes to the SQLite's
-            # backend `remake_table` method.
-            and schema_editor.connection.vendor != "sqlite"
-        ):
-            _alter_field_db_default(schema_editor, model, self.name)
+        if field.default is not NOT_PROVIDED:
+            if schema_editor.connection.vendor == "sqlite":
+                with _include_column_default(schema_editor, self.name):
+                    super().database_forwards(
+                        app_label, schema_editor, from_state, to_state
+                    )
+            else:
+                _alter_field_db_default(schema_editor, model, self.name)
         else:
             nullable_field = field.clone()
             nullable_field.null = True
