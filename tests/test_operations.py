@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from django.db import connection, migrations, models
 from django.db.migrations.operations.base import Operation
@@ -79,24 +79,28 @@ class AddFieldTests(OperationTestCase):
 
 
 class PostAddFieldTests(OperationTestCase):
-    def test_database_forwards(self, preserve_default=True):
+    def test_database_forwards(
+        self, preserve_default=True
+    ) -> Tuple[ProjectState, ProjectState]:
         model_name = "TestModel"
         field_name = "foo"
         field = models.IntegerField(default=42)
-        state = self.apply_operations(
+        from_state = self.apply_operations(
             [
                 migrations.CreateModel(model_name, [("id", models.AutoField())]),
                 AddField(
                     model_name, field_name, field, preserve_default=preserve_default
                 ),
-                PostAddField(model_name, field_name, field),
             ]
+        )
+        to_state = self.apply_operation(
+            PostAddField(model_name, field_name, field), from_state.clone()
         )
         if not preserve_default:
             self.assertIs(
                 NOT_PROVIDED,
                 get_model_state_field(
-                    state.models["tests", model_name.lower()], field_name
+                    to_state.models["tests", model_name.lower()], field_name
                 ).default,
             )
         with connection.cursor() as cursor:
@@ -104,9 +108,35 @@ class PostAddFieldTests(OperationTestCase):
                 cursor, "tests_testmodel"
             )
         self.assertIsNone(fields[-1].default)
+        return from_state, to_state
 
     def test_database_forwards_discard_default(self):
         self.test_database_forwards(preserve_default=False)
+
+    def test_database_backwards(self, preserve_default=True):
+        from_state, to_state = self.test_database_forwards(preserve_default)
+        model_name = "TestModel"
+        field_name = "foo"
+        field = models.IntegerField(default=42)
+        with connection.schema_editor() as schema_editor:
+            PostAddField(model_name, field_name, field).database_backwards(
+                "tests", schema_editor, to_state, from_state
+            )
+        if not preserve_default:
+            self.assertIs(
+                NOT_PROVIDED,
+                get_model_state_field(
+                    from_state.models["tests", model_name.lower()], field_name
+                ).default,
+            )
+        with connection.cursor() as cursor:
+            fields = connection.introspection.get_table_description(
+                cursor, "tests_testmodel"
+            )
+        self.assertEqual(int(fields[-1].default), 42)
+
+    def test_database_backwards_discard_default(self):
+        self.test_database_backwards(preserve_default=False)
 
     def test_elidable(self):
         model_name = "TestModel"

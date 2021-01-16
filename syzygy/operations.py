@@ -25,6 +25,25 @@ def _alter_field_db_default(schema_editor, model, name, drop=False):
     schema_editor.execute(sql, params)
 
 
+@contextmanager
+def _include_column_default(schema_editor, field_name):
+    column_sql_ = schema_editor.column_sql
+
+    def column_sql(model, field, include_default=False):
+        include_default |= field.name == field_name
+        # XXX: SQLite doesn't support parameterized DDL but this isn't an
+        # issue upstream since this method is never called with
+        # `include_default=True` due to table rebuild.
+        sql, params = column_sql_(model, field, include_default)
+        return sql % tuple(params), ()
+
+    schema_editor.column_sql = column_sql
+    try:
+        yield
+    finally:
+        schema_editor.column_sql = column_sql_
+
+
 class PreRemoveField(migrations.AlterField):
     """
     Perform database operations required to make sure an application with a
@@ -70,26 +89,6 @@ class AddField(migrations.AddField):
     """
 
     @contextmanager
-    def _include_column_default(self, schema_editor, model):
-        # On the SQLite backend the strategy is different since it emulates
-        # ALTER support by rebuilding tables.
-        column_sql_ = schema_editor.column_sql
-
-        def column_sql(model, field, include_default=False):
-            include_default |= field.name == self.name
-            # XXX: SQLite doesn't support parameterized DDL but this isn't an
-            # issue upstream since this method is never called with
-            # `include_default=True` due to table rebuild.
-            sql, params = column_sql_(model, field, include_default)
-            return sql % tuple(params), ()
-
-        schema_editor.column_sql = column_sql
-        try:
-            yield
-        finally:
-            schema_editor.column_sql = column_sql_
-
-    @contextmanager
     def _prevent_drop_default(self, schema_editor, model):
         # On other backends the most straightforward way
         drop_default_sql_params = _alter_field_db_default_sql_params(
@@ -112,7 +111,9 @@ class AddField(migrations.AddField):
         # XXX: Hopefully future support for `Field.db_default` will add better
         # injection points to `BaseSchemaEditor.add_field`.
         if schema_editor.connection.vendor == "sqlite":
-            return self._include_column_default(schema_editor, model)
+            # On the SQLite backend the strategy is different since it emulates
+            # ALTER support by rebuilding tables.
+            return _include_column_default(schema_editor, self.name)
         return self._prevent_drop_default(schema_editor, model)
 
     def database_forwards(self, app_label, schema_editor, from_state, to_state):
@@ -142,7 +143,21 @@ class PostAddField(migrations.AlterField):
         if not self.allow_migrate_model(schema_editor.connection.alias, model):
             return
         if schema_editor.connection.vendor == "sqlite":
-            # Simply trigger a table rebuild.
+            # Trigger a table rebuild to DROP the database level DEFAULT
             super().database_forwards(app_label, schema_editor, from_state, to_state)
         else:
             _alter_field_db_default(schema_editor, model, self.name, drop=True)
+
+    def database_backwards(self, app_label, schema_editor, from_state, to_state):
+        to_state = to_state.clone()
+        super().state_forwards(app_label, to_state)
+        model = to_state.apps.get_model(app_label, self.model_name)
+        if not self.allow_migrate_model(schema_editor.connection.alias, model):
+            return
+        if schema_editor.connection.vendor == "sqlite":
+            with _include_column_default(schema_editor, self.name):
+                super().database_forwards(
+                    app_label, schema_editor, from_state, to_state
+                )
+        else:
+            _alter_field_db_default(schema_editor, model, self.name)
