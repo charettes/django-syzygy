@@ -1,4 +1,5 @@
 import itertools
+import sys
 
 import django
 from django.db.migrations import operations
@@ -6,7 +7,9 @@ from django.db.migrations.autodetector import (
     MigrationAutodetector as _MigrationAutodetector,
 )
 from django.db.migrations.operations.base import Operation
+from django.db.migrations.questioner import InteractiveMigrationQuestioner
 from django.db.models.fields import NOT_PROVIDED
+from django.utils.functional import cached_property
 
 from .operations import AddField, PostAddField, PreRemoveField
 from .plan import partition_operations
@@ -48,6 +51,12 @@ class MigrationAutodetector(_MigrationAutodetector):
 
     STAGE_SPLIT = "__stage__"
 
+    @cached_property
+    def has_interactive_questionner(self) -> bool:
+        return not self.questioner.dry_run and isinstance(
+            self.questioner, InteractiveMigrationQuestioner
+        )
+
     def _generate_added_field(self, app_label, model_name, field_name):
         super()._generate_added_field(app_label, model_name, field_name)
         add_field = self.generated_operations[app_label][-1]
@@ -73,8 +82,38 @@ class MigrationAutodetector(_MigrationAutodetector):
             for fname, field in self.from_state.models[app_label, model_name].fields:
                 if fname == field_name:
                     break
-        if field.default is NOT_PROVIDED and field.null:
+        remove_default = field.default
+        if remove_default is NOT_PROVIDED and field.null:
             return super()._generate_removed_field(app_label, model_name, field_name)
+
+        if remove_default is NOT_PROVIDED:
+            if self.has_interactive_questionner:
+                choice = self.questioner._choice_input(
+                    "You are trying to remove a non-nullable field '%s' from %s without a default; "
+                    "we can't do that (the database needs a default for inserts before the removal).\n"
+                    "Please select a fix:" % (field_name, model_name),
+                    [
+                        (
+                            "Provide a one-off default now (will be set at the "
+                            "database level in pre-deployment stage)"
+                        ),
+                        (
+                            "Make the field temporarily nullable (attempts at reverting the "
+                            "field removal might fail)"
+                        ),
+                    ],
+                )
+                if choice == 1:
+                    remove_default = self.questioner._ask_default()
+                elif choice == 2:
+                    pass
+                else:
+                    sys.exit(3)
+            else:
+                remove_default = self.questioner.defaults.get("ask_remove_default")
+            if remove_default is not NOT_PROVIDED:
+                field = field.clone()
+                field.default = remove_default
         self.add_operation(
             app_label,
             PreRemoveField(model_name=model_name, name=field_name, field=field),
