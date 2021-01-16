@@ -26,6 +26,22 @@ def _alter_field_db_default(schema_editor, model, name, drop=False):
 
 
 @contextmanager
+def _force_field_alteration(schema_editor):
+    # Django 3.2 implements an optimization to prevent SQLite table rebuilds
+    # when unnecessary. Until proper db_default alteration support lands this
+    # optimization has to be disabled under some circumstances.
+    _field_should_be_altered = getattr(schema_editor, "_field_should_be_altered", None)
+    if _field_should_be_altered is None:
+        yield
+        return
+    schema_editor._field_should_be_altered = lambda old_field, new_field: True
+    try:
+        yield
+    finally:
+        schema_editor._field_should_be_altered = _field_should_be_altered
+
+
+@contextmanager
 def _include_column_default(schema_editor, field_name):
     column_sql_ = schema_editor.column_sql
 
@@ -39,7 +55,8 @@ def _include_column_default(schema_editor, field_name):
 
     schema_editor.column_sql = column_sql
     try:
-        yield
+        with _force_field_alteration(schema_editor):
+            yield
     finally:
         schema_editor.column_sql = column_sql_
 
@@ -169,7 +186,10 @@ class PostAddField(migrations.AlterField):
             return
         if schema_editor.connection.vendor == "sqlite":
             # Trigger a table rebuild to DROP the database level DEFAULT
-            super().database_forwards(app_label, schema_editor, from_state, to_state)
+            with _force_field_alteration(schema_editor):
+                super().database_forwards(
+                    app_label, schema_editor, from_state, to_state
+                )
         else:
             _alter_field_db_default(schema_editor, model, self.name, drop=True)
 
