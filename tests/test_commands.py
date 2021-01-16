@@ -72,9 +72,9 @@ class MakeMigrationsTests(TestCase):
         )
         output = stdout.getvalue()
         if django.VERSION >= (3, 2):
-            self.assertIn("null_field_removal/0002_alter_foo_bar.py", output)
+            self.assertIn("null_field_removal/0002_set_db_default_foo_bar.py", output)
         else:
             self.assertIn("null_field_removal/0002_auto", output)
-        self.assertIn("- Alter field bar on foo", output)
+        self.assertIn("- Set database DEFAULT of field bar on foo", output)
         self.assertIn("null_field_removal/0003_remove_foo_bar.py", output)
         self.assertIn("- Remove field bar from foo", output)

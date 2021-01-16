@@ -166,6 +166,22 @@ class PostAddFieldTests(OperationTestCase):
             Stage.POST_DEPLOY,
         )
 
+    def test_migration_name_fragment(self):
+        self.assertEqual(
+            PostAddField(
+                "TestModel", "foo", models.IntegerField(default=42)
+            ).migration_name_fragment,
+            "drop_db_default_testmodel_foo",
+        )
+
+    def test_describe(self):
+        self.assertEqual(
+            PostAddField(
+                "TestModel", "foo", models.IntegerField(default=42)
+            ).describe(),
+            "Drop database DEFAULT of field foo on TestModel",
+        )
+
 
 class PreRemoveFieldTests(OperationTestCase):
     def test_database_forwards_null(self):
@@ -220,3 +236,29 @@ class PreRemoveFieldTests(OperationTestCase):
             migrations.RemoveField(model_name, field_name, field),
         ]
         self.assert_optimizes_to(operations, [migrations.CreateModel(model_name, [])])
+
+    def test_migration_name_fragment(self):
+        self.assertEqual(
+            PreRemoveField(
+                "TestModel", "foo", models.IntegerField(default=42)
+            ).migration_name_fragment,
+            "set_db_default_testmodel_foo",
+        )
+        self.assertEqual(
+            PreRemoveField(
+                "TestModel", "foo", models.IntegerField()
+            ).migration_name_fragment,
+            "set_nullable_testmodel_foo",
+        )
+
+    def test_describe(self):
+        self.assertEqual(
+            PreRemoveField(
+                "TestModel", "foo", models.IntegerField(default=42)
+            ).describe(),
+            "Set database DEFAULT of field foo on TestModel",
+        )
+        self.assertEqual(
+            PreRemoveField("TestModel", "foo", models.IntegerField()).describe(),
+            "Set field foo of TestModel NULLable",
+        )

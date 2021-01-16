@@ -86,6 +86,26 @@ class PreRemoveField(migrations.AlterField):
             operation.state_forwards(app_label, to_state)
             operation.database_forwards(app_label, schema_editor, from_state, to_state)
 
+    @property
+    def migration_name_fragment(self):
+        if self.field.default is not NOT_PROVIDED:
+            return "set_db_default_%s_%s" % (
+                self.model_name_lower,
+                self.name,
+            )
+        return "set_nullable_%s_%s" % (
+            self.model_name_lower,
+            self.name,
+        )
+
+    def describe(self):
+        if self.field.default is not NOT_PROVIDED:
+            return "Set database DEFAULT of field %s on %s" % (
+                self.name,
+                self.model_name,
+            )
+        return "Set field %s of %s NULLable" % (self.name, self.model_name)
+
 
 class AddField(migrations.AddField):
     """
@@ -166,3 +186,16 @@ class PostAddField(migrations.AlterField):
                 )
         else:
             _alter_field_db_default(schema_editor, model, self.name)
+
+    @property
+    def migration_name_fragment(self):
+        return "drop_db_default_%s_%s" % (
+            self.model_name_lower,
+            self.name,
+        )
+
+    def describe(self):
+        return "Drop database DEFAULT of field %s on %s" % (
+            self.name,
+            self.model_name,
+        )
