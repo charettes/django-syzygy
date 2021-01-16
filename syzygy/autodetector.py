@@ -1,7 +1,6 @@
 import itertools
 import sys
 
-import django
 from django.db.migrations import operations
 from django.db.migrations.autodetector import (
     MigrationAutodetector as _MigrationAutodetector,
@@ -11,6 +10,7 @@ from django.db.migrations.questioner import InteractiveMigrationQuestioner
 from django.db.models.fields import NOT_PROVIDED
 from django.utils.functional import cached_property
 
+from .compat import get_model_state_field
 from .operations import AddField, PostAddField, PreRemoveField
 from .plan import partition_operations
 
@@ -76,12 +76,9 @@ class MigrationAutodetector(_MigrationAutodetector):
         )
 
     def _generate_removed_field(self, app_label, model_name, field_name):
-        if django.VERSION >= (3, 1):
-            field = self.from_state.models[app_label, model_name].fields[field_name]
-        else:
-            for fname, field in self.from_state.models[app_label, model_name].fields:
-                if fname == field_name:
-                    break
+        field = get_model_state_field(
+            self.from_state.models[app_label, model_name], field_name
+        )
         remove_default = field.default
         if remove_default is NOT_PROVIDED and field.null:
             return super()._generate_removed_field(app_label, model_name, field_name)

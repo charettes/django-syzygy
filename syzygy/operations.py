@@ -134,6 +134,9 @@ class PostAddField(migrations.AlterField):
     elidable = True
     stage = Stage.POST_DEPLOY
 
+    def state_forwards(self, app_label, state):
+        pass
+
     def database_forwards(self, app_label, schema_editor, from_state, to_state):
         model = to_state.apps.get_model(app_label, self.model_name)
         if not self.allow_migrate_model(schema_editor.connection.alias, model):

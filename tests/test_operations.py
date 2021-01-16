@@ -4,9 +4,11 @@ from django.db import connection, migrations, models
 from django.db.migrations.operations.base import Operation
 from django.db.migrations.optimizer import MigrationOptimizer
 from django.db.migrations.state import ProjectState
+from django.db.models.fields import NOT_PROVIDED
 from django.test import TestCase
 
 from syzygy.autodetector import MigrationAutodetector
+from syzygy.compat import get_model_state_field
 from syzygy.constants import Stage
 from syzygy.operations import AddField, PostAddField, PreRemoveField
 from syzygy.plan import get_operation_stage
@@ -77,22 +79,34 @@ class AddFieldTests(OperationTestCase):
 
 
 class PostAddFieldTests(OperationTestCase):
-    def test_database_forwards(self):
+    def test_database_forwards(self, preserve_default=True):
         model_name = "TestModel"
         field_name = "foo"
         field = models.IntegerField(default=42)
-        self.apply_operations(
+        state = self.apply_operations(
             [
                 migrations.CreateModel(model_name, [("id", models.AutoField())]),
-                AddField(model_name, field_name, field),
+                AddField(
+                    model_name, field_name, field, preserve_default=preserve_default
+                ),
                 PostAddField(model_name, field_name, field),
             ]
         )
+        if not preserve_default:
+            self.assertIs(
+                NOT_PROVIDED,
+                get_model_state_field(
+                    state.models["tests", model_name.lower()], field_name
+                ).default,
+            )
         with connection.cursor() as cursor:
             fields = connection.introspection.get_table_description(
                 cursor, "tests_testmodel"
             )
         self.assertIsNone(fields[-1].default)
+
+    def test_database_forwards_discard_default(self):
+        self.test_database_forwards(preserve_default=False)
 
     def test_elidable(self):
         model_name = "TestModel"
