@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-from __future__ import unicode_literals
-
 from setuptools import find_packages, setup
 
 with open("README.rst") as file_:
@@ -22,6 +20,8 @@ setup(
         "Framework :: Django",
         "Framework :: Django :: 2.2",
         "Framework :: Django :: 3.0",
+        "Framework :: Django :: 3.1",
+        "Framework :: Django :: 3.2",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
@@ -29,6 +29,7 @@ setup(
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
 )
