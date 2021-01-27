@@ -9,6 +9,7 @@ setup(
     version="0.1.0a2",
     description="",
     long_description=long_description,
+    long_description_content_type="text/x-rst",
     url="https://github.com/charettes/django-syzygy",
     author="Simon Charette",
     author_email="charette.s@gmail.com",

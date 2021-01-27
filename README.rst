@@ -123,11 +123,13 @@ disabled by setting it to `None`.
 
 .. note::
 
-  The third-party app detection logic relies on :py:mod:`site` Python module
+  The third-party app detection logic relies on the `site` `Python module`_
   and is known to not properly detect all kind of third-party Django
   applications. You should rely on `MIGRATION_STAGES_FALLBACK` and
   `MIGRATION_STAGES_OVERRIDE` to configure stages if it doesn't work for your
   setup.
+
+.. _`Python module`: https://docs.python.org/3/library/site.html
 
 Development
 -----------
