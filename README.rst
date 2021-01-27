@@ -27,7 +27,7 @@ Installation
 Usage
 -----
 
-Add `'syzygy'` to your `INSTALLED_APPS`
+Add ``'syzygy'`` to your ``INSTALLED_APPS``
 
 .. code:: python
 
@@ -38,8 +38,8 @@ Add `'syzygy'` to your `INSTALLED_APPS`
         ...
     ]
 
-Setup you deployment pipeline to run `migrate --pre-deploy` before rolling
-out your code changes and `migrate` afterwards to apply the postponed
+Setup you deployment pipeline to run ``migrate --pre-deploy`` before rolling
+out your code changes and ``migrate`` afterwards to apply the postponed
 migrations.
 
 Concept
@@ -49,9 +49,9 @@ Syzygy introduces a notion of *prerequisite* and *postponed* migrations with
 regards to deployment.
 
 A migration is assumed to be a *prerequisite* to deployment unless it contains
-a destructive operation or the migration has its `stage` class attribute set to
-`POST_DEPLOY`. When this attribute is defined it will bypass `operations` based
-heuristics.
+a destructive operation or the migration has its ``stage`` class attribute set
+to ``Stage.POST_DEPLOY``. When this attribute is defined it will bypass
+``operations`` based heuristics.
 
 e.g. this migration would be considered a *prerequisite*
 
@@ -84,7 +84,7 @@ while the following migrations would be *postponed*
 
 In order to prevent the creation of migrations mixing operations of different
 *stages* this package registers system checks. These checks will generate an error
-for every migration with an ambiguous `stage`.
+for every migration with an ambiguous ``stage``.
 
 e.g. this migration would result in a check error
 
@@ -113,20 +113,20 @@ ambiguous sequence of operations.
 
 Since an explicit `stage` cannot be explicitly assigned by editing these
 migrations a fallback or an override stage can be specified through the
-respective `MIGRATION_STAGES_FALLBACK` and `MIGRATION_STAGES_OVERRIDE`
+respective ``MIGRATION_STAGES_FALLBACK`` and ``MIGRATION_STAGES_OVERRIDE``
 settings.
 
 By default third-party app migrations with an ambiguous sequence of operations
-will fallback to `Stage.PRE_DEPLOY` but this behavior can be changed by
-setting `MIGRATION_THIRD_PARTY_STAGES_FALLBACK` to `Stage.POST_DEPLOY` or
-disabled by setting it to `None`.
+will fallback to ``Stage.PRE_DEPLOY`` but this behavior can be changed by
+setting ``MIGRATION_THIRD_PARTY_STAGES_FALLBACK`` to ``Stage.POST_DEPLOY`` or
+disabled by setting it to ``None``.
 
 .. note::
 
-  The third-party app detection logic relies on the `site` `Python module`_
+  The third-party app detection logic relies on the ``site`` `Python module`_
   and is known to not properly detect all kind of third-party Django
-  applications. You should rely on `MIGRATION_STAGES_FALLBACK` and
-  `MIGRATION_STAGES_OVERRIDE` to configure stages if it doesn't work for your
+  applications. You should rely on ``MIGRATION_STAGES_FALLBACK`` and
+  ``MIGRATION_STAGES_OVERRIDE`` to configure stages if it doesn't work for your
   setup.
 
 .. _`Python module`: https://docs.python.org/3/library/site.html
