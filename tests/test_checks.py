@@ -6,8 +6,10 @@ from django.test import SimpleTestCase
 
 class ChecksTests(SimpleTestCase):
     hint = (
-        "Assign an explicit stage to it or break its operation into multiple "
-        "migrations if it's not already applied."
+        "Assign an explicit stage to it, break its operation into multiple "
+        "migrations if it's not already applied or define an explicit stage for "
+        "it using `MIGRATION_STAGE_OVERRIDE` or `MIGRATION_STAGE_FALLBACK` if the "
+        "migration is not under your control."
     )
 
     def test_ambiguous_stage(self):

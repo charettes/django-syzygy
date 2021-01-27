@@ -104,6 +104,31 @@ With this new notion of migration stage it's possible for the `migrate` command
 to target only migrations meant to be run before a deployment using the
 `--pre-deploy` flag or error out in the case on an ambiguous plan.
 
+Third-party migrations
+----------------------
+
+As long as the adoption of migration stages concept  not generalized your
+project might depend on third-party apps containing migrations with an
+ambiguous sequence of operations.
+
+Since an explicit `stage` cannot be explicitly assigned by editing these
+migrations a fallback or an override stage can be specified through the
+respective `MIGRATION_STAGES_FALLBACK` and `MIGRATION_STAGES_OVERRIDE`
+settings.
+
+By default third-party app migrations with an ambiguous sequence of operations
+will fallback to `Stage.PRE_DEPLOY` but this behavior can be changed by
+setting `MIGRATION_THIRD_PARTY_STAGES_FALLBACK` to `Stage.POST_DEPLOY` or
+disabled by setting it to `None`.
+
+.. note::
+
+  The third-party app detection logic relies on :py:mod:`site` Python module
+  and is known to not properly detect all kind of third-party Django
+  applications. You should rely on `MIGRATION_STAGES_FALLBACK` and
+  `MIGRATION_STAGES_OVERRIDE` to configure stages if it doesn't work for your
+  setup.
+
 Development
 -----------
 

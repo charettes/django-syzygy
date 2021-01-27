@@ -1,13 +1,12 @@
 from typing import Dict, List, Optional, Tuple
 
-from django.conf import settings
 from django.db.migrations import DeleteModel, Migration, RemoveField
 from django.db.migrations.operations.base import Operation
 
+from . import conf
 from .constants import Stage
 from .exceptions import AmbiguousPlan, AmbiguousStage
 
-MigrationStagesSetting = Dict[str, Stage]
 Plan = List[Tuple[Migration, bool]]
 
 
@@ -50,12 +49,26 @@ def partition_operations(
     return stage_operations[Stage.PRE_DEPLOY], stage_operations[Stage.POST_DEPLOY]
 
 
-def _get_configured_migration_stage(migration: Migration) -> Optional[Stage]:
-    """Return the `Stage` configured through setting:`MIGRATION_STAGES` of the migration."""
-    setting: MigrationStagesSetting = getattr(settings, "MIGRATION_STAGES", None)
-    if setting is None:
-        return
-    return setting.get(f"{migration.app_label}.{migration.name}")
+def _get_migration_stage_override(migration: Migration) -> Optional[Stage]:
+    """
+    Return the `Stage` override configured through setting:`MIGRATION_STAGES_OVERRIDE`
+    of the migration.
+    """
+    override = conf.MIGRATION_STAGES_OVERRIDE
+    return override.get(f"{migration.app_label}.{migration.name}") or override.get(
+        migration.app_label
+    )
+
+
+def _get_migration_stage_fallback(migration: Migration) -> Optional[Stage]:
+    """
+    Return the `Stage` fallback configured through setting:`MIGRATION_STAGES_FALLBACK`
+    of the migration.
+    """
+    fallback = conf.MIGRATION_STAGES_FALLBACK
+    return fallback.get(f"{migration.app_label}.{migration.name}") or fallback.get(
+        migration.app_label
+    )
 
 
 def get_migration_stage(migration: Migration) -> Optional[Stage]:
@@ -71,7 +84,7 @@ def get_migration_stage(migration: Migration) -> Optional[Stage]:
     and a :class:`syzygy.exceptions.AmbiguousStage` exception will be raised
     if it contains operations of mixed stages.
     """
-    stage = getattr(migration, "stage", None) or _get_configured_migration_stage(
+    stage = getattr(migration, "stage", None) or _get_migration_stage_override(
         migration
     )
     if stage is not None:
@@ -81,6 +94,10 @@ def get_migration_stage(migration: Migration) -> Optional[Stage]:
         if stage is None:
             stage = operation_stage
         elif operation_stage != stage:
+            fallback_stage = _get_migration_stage_fallback(migration)
+            if fallback_stage:
+                stage = fallback_stage
+                break
             raise AmbiguousStage(
                 f"Cannot automatically determine stage of {migration}."
             )

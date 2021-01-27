@@ -14,8 +14,10 @@ def check_migrations(app_configs, **kwargs):
         app_configs = apps.get_app_configs()
     errors = []
     hint = (
-        "Assign an explicit stage to it or break its operation into multiple "
-        "migrations if it's not already applied."
+        "Assign an explicit stage to it, break its operation into multiple "
+        "migrations if it's not already applied or define an explicit stage for "
+        "it using `MIGRATION_STAGE_OVERRIDE` or `MIGRATION_STAGE_FALLBACK` if the "
+        "migration is not under your control."
     )
     for app_config in app_configs:
         # Most of the following code is taken from MigrationLoader.load_disk

@@ -1,3 +1,5 @@
+from itertools import product
+
 from django.conf import settings
 from django.db.migrations import CreateModel, DeleteModel, Migration
 from django.db.migrations.operations.base import Operation
@@ -79,14 +81,15 @@ class GetMigrationStageTests(SimpleTestCase):
     def setUp(self):
         self.migration = Migration(app_label="tests", name="migration")
 
-    def test_stage_setting(self):
+    def test_stage_override_setting(self):
         with self.settings():
-            del settings.MIGRATION_STAGES
+            del settings.MIGRATION_STAGES_OVERRIDE
             self.assertIsNone(get_migration_stage(self.migration))
 
-        for stage in Stage:
-            with self.subTest(stage=stage), self.settings(
-                MIGRATION_STAGES={"tests.migration": stage}
+        overrides = ["tests.migration", "tests"]
+        for stage, override in product(Stage, overrides):
+            with self.subTest(stage=stage, override=override), self.settings(
+                MIGRATION_STAGES_OVERRIDE={override: stage}
             ):
                 self.assertIs(get_migration_stage(self.migration), stage)
 
@@ -112,6 +115,18 @@ class GetMigrationStageTests(SimpleTestCase):
         self.migration.operations = [CreateModel("model", []), DeleteModel("model")]
         with self.assertRaises(AmbiguousStage):
             get_migration_stage(self.migration)
+
+    def test_stage_fallback_setting(self):
+        self.migration.operations = [CreateModel("model", []), DeleteModel("model")]
+        with self.assertRaises(AmbiguousStage):
+            get_migration_stage(self.migration)
+
+        overrides = ["tests.migration", "tests"]
+        for stage, override in product(Stage, overrides):
+            with self.subTest(stage=stage, override=override), self.settings(
+                MIGRATION_STAGES_FALLBACK={override: stage}
+            ):
+                self.assertIs(get_migration_stage(self.migration), stage)
 
 
 class MustPostDeployMigrationTests(SimpleTestCase):
