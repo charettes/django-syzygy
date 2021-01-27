@@ -6,7 +6,7 @@ with open("README.rst") as file_:
 
 setup(
     name="django-syzygy",
-    version="0.1.0a1",
+    version="0.1.0a2",
     description="",
     long_description=long_description,
     url="https://github.com/charettes/django-syzygy",
