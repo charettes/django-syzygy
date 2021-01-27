@@ -5,7 +5,7 @@ from django.db.migrations.operations.fields import RemoveField
 from django.test import SimpleTestCase
 
 from syzygy.constants import Stage
-from syzygy.exceptions import AmbiguousStage
+from syzygy.exceptions import AmbiguousPlan, AmbiguousStage
 from syzygy.plan import (
     get_migration_stage,
     get_operation_stage,
@@ -110,7 +110,7 @@ class GetMigrationStageTests(SimpleTestCase):
 
     def test_ambiguous_operations(self):
         self.migration.operations = [CreateModel("model", []), DeleteModel("model")]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(AmbiguousStage):
             get_migration_stage(self.migration)
 
 
@@ -133,7 +133,7 @@ class MustPostDeployMigrationTests(SimpleTestCase):
 
     def test_ambiguous_operations(self):
         self.migration.operations = [CreateModel("model", []), DeleteModel("model")]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(AmbiguousStage):
             must_post_deploy_migration(self.migration)
 
 
@@ -160,5 +160,5 @@ class GetPreDeployPlanTests(SimpleTestCase):
             (self.post_deploy, False),
             (self.pre_deploy, False),
         ]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(AmbiguousPlan):
             get_pre_deploy_plan(plan)
