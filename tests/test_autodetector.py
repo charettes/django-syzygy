@@ -1,12 +1,15 @@
 from typing import Any, Dict, List, Optional
+from unittest import mock
 
 from django.db import migrations, models
 from django.db.migrations.questioner import MigrationQuestioner
 from django.db.migrations.state import ModelState, ProjectState
 from django.test import TestCase
+from django.test.utils import captured_stderr
 
 from syzygy.autodetector import MigrationAutodetector
 from syzygy.constants import Stage
+from syzygy.exceptions import AmbiguousStage
 from syzygy.operations import AddField, PostAddField, PreRemoveField
 from syzygy.plan import get_migration_stage
 
@@ -157,3 +160,38 @@ class AutodetectorTests(TestCase):
         self.assertEqual(len(changes[1].operations), 2)
         self.assertIsInstance(changes[1].operations[0], PostAddField)
         self.assertIsInstance(changes[1].operations[1], migrations.DeleteModel)
+
+    def test_mixed_stage_failure(self):
+        from_models = [
+            ModelState("tests", "Foo", [("id", models.IntegerField(primary_key=True))]),
+            ModelState(
+                "tests",
+                "Bar",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("foo", models.ForeignKey("Foo", models.CASCADE)),
+                ],
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("bar", models.BooleanField(default=False)),
+                ],
+            ),
+        ]
+        with mock.patch(
+            "syzygy.autodetector.partition_operations", side_effect=AmbiguousStage
+        ), captured_stderr() as stderr:
+            self.get_changes(from_models, to_models)["tests"]
+        self.assertIn(
+            'The auto-detected operations for the "tests" app cannot be partitioned into deployment stages:',
+            stderr.getvalue(),
+        )
+        self.assertIn(
+            "- Remove field foo from bar",
+            stderr.getvalue(),
+        )
