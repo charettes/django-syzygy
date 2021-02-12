@@ -1,4 +1,5 @@
 from io import StringIO
+from unittest import mock
 
 import django
 from django.core.management import CommandError, call_command
@@ -62,6 +63,20 @@ class MigrateTests(TransactionTestCase):
 
 
 class MakeMigrationsTests(TestCase):
+    def test_disabled(self):
+        failure = AssertionError("syzygy should be disabled")
+        with mock.patch(
+            "syzygy.management.commands.makemigrations.MigrationAutodetector",
+            side_effect=failure,
+        ):
+            call_command(
+                "makemigrations",
+                "tests",
+                verbosity=0,
+                dry_run=True,
+                disable_syzygy=True,
+            )
+
     @override_settings(
         MIGRATION_MODULES={"tests": "tests.test_migrations.null_field_removal"}
     )
