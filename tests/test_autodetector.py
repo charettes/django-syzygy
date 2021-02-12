@@ -123,3 +123,37 @@ class AutodetectorTests(TestCase):
         self.assertEqual(changes[1].dependencies, [("tests", "auto_1")])
         self.assertEqual(len(changes[1].operations), 1)
         self.assertIsInstance(changes[1].operations[0], migrations.DeleteModel)
+
+    def test_mixed_stage_reorder(self):
+        from_models = [
+            ModelState("tests", "Foo", [("id", models.IntegerField(primary_key=True))]),
+            ModelState(
+                "tests",
+                "Bar",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("foo", models.ForeignKey("Foo", models.CASCADE)),
+                ],
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("bar", models.BooleanField(default=False)),
+                ],
+            ),
+        ]
+        changes = self.get_changes(from_models, to_models)["tests"]
+        self.assertEqual(len(changes), 2)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        self.assertEqual(changes[0].dependencies, [])
+        self.assertEqual(len(changes[0].operations), 1)
+        self.assertIsInstance(changes[0].operations[0], migrations.AddField)
+        self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
+        self.assertEqual(changes[1].dependencies, [("tests", "auto_1")])
+        self.assertEqual(len(changes[1].operations), 2)
+        self.assertIsInstance(changes[1].operations[0], PostAddField)
+        self.assertIsInstance(changes[1].operations[1], migrations.DeleteModel)

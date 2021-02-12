@@ -67,9 +67,15 @@ class MigrationAutodetector(_MigrationAutodetector):
             stage,
             dependencies=[(app_label, self.STAGE_SPLIT, add_field)],
         )
+        post_add_field = PostAddField(
+            model_name=model_name, name=field_name, field=add_field.field
+        )
+        # Operation cannot be elided for the duration of the migration
+        # generation.
+        post_add_field.elidable = False
         self.add_operation(
             app_label,
-            PostAddField(model_name=model_name, name=field_name, field=add_field.field),
+            post_add_field,
             dependencies=[
                 (self.STAGE_SPLIT, stage),
             ],
@@ -111,6 +117,12 @@ class MigrationAutodetector(_MigrationAutodetector):
             if remove_default is not NOT_PROVIDED:
                 field = field.clone()
                 field.default = remove_default
+        pre_remove_field = PreRemoveField(
+            model_name=model_name, name=field_name, field=field
+        )
+        # Operation cannot be elided for the duration of the migration
+        # generation.
+        pre_remove_field.elidable = False
         self.add_operation(
             app_label,
             PreRemoveField(model_name=model_name, name=field_name, field=field),
@@ -148,7 +160,9 @@ class MigrationAutodetector(_MigrationAutodetector):
         for app_label, app_operations in list(self.generated_operations.items()):
             if app_label == self.STAGE_SPLIT:
                 continue
-            pre_operations, post_operations = partition_operations(app_operations)
+            pre_operations, post_operations = partition_operations(
+                app_operations, app_label
+            )
             if pre_operations and post_operations:
                 stage = Stage()
                 self.add_operation(
@@ -157,6 +171,9 @@ class MigrationAutodetector(_MigrationAutodetector):
                     dependencies=[(app_label, self.STAGE_SPLIT, pre_operations[-1])],
                 )
                 post_operations[0]._auto_deps.append((self.STAGE_SPLIT, stage))
+                # Assign updated operations as they might have be re-ordered by
+                # `partition_operations`.
+                self.generated_operations[app_label] = pre_operations + post_operations
         super()._build_migration_list(*args, **kwargs)
         # Remove all dangling references to stage migrations.
         if self.migrations.pop(self.STAGE_SPLIT, None):

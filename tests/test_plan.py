@@ -48,32 +48,41 @@ class PartitionOperationsTests(SimpleTestCase):
     ]
 
     def test_empty(self):
-        self.assertEqual(partition_operations([]), ([], []))
+        self.assertEqual(partition_operations([], "migrations"), ([], []))
 
     def test_pre_deploy_only(self):
         self.assertEqual(
-            partition_operations(self.pre_deploy_operations),
+            partition_operations(self.pre_deploy_operations, "migrations"),
             (self.pre_deploy_operations, []),
         )
 
     def test_post_deploy_only(self):
         self.assertEqual(
-            partition_operations(self.post_deploy_operations),
+            partition_operations(self.post_deploy_operations, "migrations"),
             ([], self.post_deploy_operations),
         )
 
     def test_mixed(self):
         self.assertEqual(
             partition_operations(
-                self.pre_deploy_operations + self.post_deploy_operations
+                self.pre_deploy_operations + self.post_deploy_operations, "migrations"
             ),
             (self.pre_deploy_operations, self.post_deploy_operations),
+        )
+
+    def test_mixed_reorder(self):
+        post_deploy_operations = [DeleteModel("other")]
+        self.assertEqual(
+            partition_operations(
+                post_deploy_operations + self.pre_deploy_operations, "migrations"
+            ),
+            (self.pre_deploy_operations, post_deploy_operations),
         )
 
     def test_ambiguous(self):
         with self.assertRaises(AmbiguousStage):
             partition_operations(
-                self.post_deploy_operations + self.pre_deploy_operations
+                self.post_deploy_operations + self.pre_deploy_operations, "migrations"
             )
 
 

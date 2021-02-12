@@ -25,28 +25,37 @@ def get_operation_stage(operation: Operation) -> Stage:
 
 def partition_operations(
     operations: List[Operation],
+    app_label: str,
 ) -> Tuple[List[Operation], List[Operation]]:
     """
     Partition an ordered list of operations by :class:`syzygy.constants.Stage`.
 
-    If `operations` is composed of members with a :attr:`syzygy.constants.Stage.PRE_DEPLOY`
-    stage after members with a :attr:`syzygy.constants.Stage.PRE_DEPLOY` stage
-    a :class:`syzygy.exceptions.AmbiguousStage` exception will be raised.
+    If `operations` is composed of members with a
+    :attr:`syzygy.constants.Stage.PRE_DEPLOY` stage after members with a
+    :attr:`syzygy.constants.Stage.PRE_DEPLOY` stage and cannot be reordered a
+    :class:`syzygy.exceptions.AmbiguousStage` exception will be raised.
     """
     stage_operations: Dict[Stage, List[Operation]] = {
         Stage.PRE_DEPLOY: [],
         Stage.POST_DEPLOY: [],
     }
-    current_stage = Stage.PRE_DEPLOY
+    post_deploy_operations = stage_operations[Stage.POST_DEPLOY]
     for operation in operations:
         operation_stage = get_operation_stage(operation)
-        if operation_stage is Stage.PRE_DEPLOY and current_stage is Stage.POST_DEPLOY:
+        if operation_stage is Stage.PRE_DEPLOY and post_deploy_operations:
+            # If a pre-deploy operation is encountered after a post-deployment
+            # one attempt to re-order operation is allowed.
+            if all(
+                op.reduce(operation, app_label) is True for op in post_deploy_operations  # type: ignore
+            ):
+                stage_operations[Stage.PRE_DEPLOY].append(operation)
+                continue
             raise AmbiguousStage(
-                "Post-deployment operations cannot be followed by pre-deployments operations"
+                "Post-deployment operations cannot be followed by "
+                "pre-deployments operations"
             )
         stage_operations[operation_stage].append(operation)
-        current_stage = operation_stage
-    return stage_operations[Stage.PRE_DEPLOY], stage_operations[Stage.POST_DEPLOY]
+    return stage_operations[Stage.PRE_DEPLOY], post_deploy_operations
 
 
 def _get_migration_stage_override(migration: Migration) -> Optional[Stage]:
