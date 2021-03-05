@@ -71,9 +71,6 @@ class MigrationAutodetector(_MigrationAutodetector):
         post_add_field = PostAddField(
             model_name=model_name, name=field_name, field=add_field.field
         )
-        # Operation cannot be elided for the duration of the migration
-        # generation.
-        post_add_field.elidable = False
         self.add_operation(
             app_label,
             post_add_field,
@@ -121,13 +118,7 @@ class MigrationAutodetector(_MigrationAutodetector):
         pre_remove_field = PreRemoveField(
             model_name=model_name, name=field_name, field=field
         )
-        # Operation cannot be elided for the duration of the migration
-        # generation.
-        pre_remove_field.elidable = False
-        self.add_operation(
-            app_label,
-            PreRemoveField(model_name=model_name, name=field_name, field=field),
-        )
+        self.add_operation(app_label, pre_remove_field)
         stage = Stage()
         self.add_operation(
             self.STAGE_SPLIT,

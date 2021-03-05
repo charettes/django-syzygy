@@ -71,8 +71,6 @@ class PreRemoveField(migrations.AlterField):
     NULL'able if it's not already.
     """
 
-    elidable = True
-
     def state_forwards(self, app_label, state):
         pass
 
@@ -182,7 +180,6 @@ class PostAddField(migrations.AlterField):
     Elidable operation that drops a previously preserved database default.
     """
 
-    elidable = True
     stage = Stage.POST_DEPLOY
 
     def state_forwards(self, app_label, state):
