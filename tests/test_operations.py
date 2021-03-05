@@ -152,25 +152,6 @@ class PostAddFieldTests(OperationTestCase):
     def test_database_backwards_discard_default(self):
         self.test_database_backwards(preserve_default=False)
 
-    def test_elidable(self):
-        model_name = "TestModel"
-        field_name = "foo"
-        field = models.IntegerField(default=42)
-        operations = [
-            migrations.CreateModel(model_name, [("id", models.AutoField())]),
-            AddField(model_name, field_name, field),
-            PostAddField(model_name, field_name, field),
-        ]
-        self.maxDiff = None
-        self.assert_optimizes_to(
-            operations,
-            [
-                migrations.CreateModel(
-                    model_name, [("id", models.AutoField()), (field_name, field)]
-                ),
-            ],
-        )
-
     def test_stage(self):
         model_name = "TestModel"
         field_name = "foo"
@@ -208,6 +189,21 @@ class PostAddFieldTests(OperationTestCase):
                 [],
                 {"model_name": model_name, "name": field_name, "field": field},
             ),
+        )
+
+    def test_reduce(self):
+        model_name = "TestModel"
+        field_name = "foo"
+        field = models.IntegerField(default=42)
+        operations = [
+            AddField(model_name, field_name, field),
+            PostAddField(model_name, field_name, field),
+        ]
+        self.assert_optimizes_to(
+            operations,
+            [
+                migrations.AddField(model_name, field_name, field),
+            ],
         )
 
 
@@ -249,21 +245,6 @@ class PreRemoveFieldTests(OperationTestCase):
         post_model = state.apps.get_model("tests", model_name)
         post_model.objects.create()
         self.assertEqual(pre_model.objects.get().foo, 42)
-
-    def test_elidable(self):
-        model_name = "TestModel"
-        field_name = "foo"
-        field = models.IntegerField(default=42)
-        operations = [
-            migrations.CreateModel(model_name, [(field_name, field)]),
-            PreRemoveField(
-                model_name,
-                field_name,
-                field,
-            ),
-            migrations.RemoveField(model_name, field_name, field),
-        ]
-        self.assert_optimizes_to(operations, [migrations.CreateModel(model_name, [])])
 
     def test_migration_name_fragment(self):
         self.assertEqual(
@@ -309,3 +290,16 @@ class PreRemoveFieldTests(OperationTestCase):
             ),
         )
 
+    def test_elidable(self):
+        model_name = "TestModel"
+        field_name = "foo"
+        field = models.IntegerField(default=42)
+        operations = [
+            PreRemoveField(
+                model_name,
+                field_name,
+                field,
+            ),
+            migrations.RemoveField(model_name, field_name, field),
+        ]
+        self.assert_optimizes_to(operations, [operations[-1]])
