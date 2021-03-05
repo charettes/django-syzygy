@@ -77,6 +77,20 @@ class AddFieldTests(OperationTestCase):
     def test_database_forwards_discard_default(self):
         self.test_database_forwards(preserve_default=False)
 
+    def test_deconstruct(self):
+        model_name = "TestModel"
+        field_name = "foo"
+        field = models.IntegerField(default=42)
+        operation = AddField(model_name, field_name, field)
+        self.assertEqual(
+            operation.deconstruct(),
+            (
+                "syzygy.operations.AddField",
+                [],
+                {"model_name": model_name, "name": field_name, "field": field},
+            ),
+        )
+
 
 class PostAddFieldTests(OperationTestCase):
     def test_database_forwards(
@@ -182,6 +196,20 @@ class PostAddFieldTests(OperationTestCase):
             "Drop database DEFAULT of field foo on TestModel",
         )
 
+    def test_deconstruct(self):
+        model_name = "TestModel"
+        field_name = "foo"
+        field = models.IntegerField(default=42)
+        operation = PostAddField(model_name, field_name, field)
+        self.assertEqual(
+            operation.deconstruct(),
+            (
+                "syzygy.operations.PostAddField",
+                [],
+                {"model_name": model_name, "name": field_name, "field": field},
+            ),
+        )
+
 
 class PreRemoveFieldTests(OperationTestCase):
     def test_database_forwards_null(self):
@@ -262,3 +290,22 @@ class PreRemoveFieldTests(OperationTestCase):
             PreRemoveField("TestModel", "foo", models.IntegerField()).describe(),
             "Set field foo of TestModel NULLable",
         )
+
+    def test_deconstruct(self):
+        model_name = "TestModel"
+        field_name = "foo"
+        field = models.IntegerField(default=42)
+        operations = PreRemoveField(
+            model_name,
+            field_name,
+            field,
+        )
+        self.assertEqual(
+            operations.deconstruct(),
+            (
+                "syzygy.operations.PreRemoveField",
+                [],
+                {"model_name": model_name, "name": field_name, "field": field},
+            ),
+        )
+
