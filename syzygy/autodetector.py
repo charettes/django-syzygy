@@ -18,12 +18,9 @@ from .plan import partition_operations
 
 class Stage(Operation):
     """
-    Fake operation that servers as a placeholder to break operations into
+    Fake operation that serves as a placeholder to break operations into
     multiple migrations.
     """
-
-    def __repr__(self):
-        return f"<Stage {id(self)}>"
 
 
 class MigrationAutodetector(_MigrationAutodetector):
