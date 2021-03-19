@@ -7,6 +7,8 @@ from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
 from django.test import TestCase, TransactionTestCase, override_settings
 
+from syzygy.constants import Stage
+
 
 class MigrateTests(TransactionTestCase):
     def tearDown(self):
@@ -26,11 +28,16 @@ class MigrateTests(TransactionTestCase):
     def test_pre_deploy_forward(self):
         stdout = StringIO()
         call_command(
-            "migrate", "tests", plan=True, no_color=True, pre_deploy=True, stdout=stdout
+            "migrate",
+            "tests",
+            plan=True,
+            no_color=True,
+            stage=Stage.PRE_DEPLOY,
+            stdout=stdout,
         )
         self.assertIn("tests.0001_pre_deploy", stdout.getvalue())
         self.assertNotIn("tests.0002_post_deploy", stdout.getvalue())
-        call_command("migrate", "tests", pre_deploy=True, verbosity=0)
+        call_command("migrate", "tests", stage=Stage.PRE_DEPLOY, verbosity=0)
         self.assertEqual(self.get_applied_migrations(), {"0001_pre_deploy"})
 
     @override_settings(MIGRATION_MODULES={"tests": "tests.test_migrations.functional"})
@@ -46,12 +53,12 @@ class MigrateTests(TransactionTestCase):
             "zero",
             plan=True,
             no_color=True,
-            pre_deploy=True,
+            stage=Stage.PRE_DEPLOY,
             stdout=stdout,
         )
         self.assertIn("tests.0002_post_deploy", stdout.getvalue())
         self.assertNotIn("tests.0001_pre_deploy", stdout.getvalue())
-        call_command("migrate", "tests", "zero", pre_deploy=True, verbosity=0)
+        call_command("migrate", "tests", "zero", stage=Stage.PRE_DEPLOY, verbosity=0)
         self.assertEqual(self.get_applied_migrations(), {"0001_pre_deploy"})
 
     @override_settings(MIGRATION_MODULES={"tests": "tests.test_migrations.ambiguous"})
@@ -59,7 +66,7 @@ class MigrateTests(TransactionTestCase):
         with self.assertRaisesMessage(
             CommandError, "Cannot automatically determine stage of tests.0001_initial."
         ):
-            call_command("migrate", "tests", pre_deploy=True, verbosity=0)
+            call_command("migrate", "tests", stage=Stage.PRE_DEPLOY, verbosity=0)
 
 
 class MakeMigrationsTests(TestCase):
