@@ -155,25 +155,27 @@ When specified the ``migrate --quorum <N:int>`` command will wait for at least
 ``N`` number invocations of ``migrate`` for the planned migrations before proceeding
 with applying them once and blocking on all callers until the operation completes.
 
-In order to use the ``--quorum`` feature you must configure ``MIGRATE_QUORUM_BACKEND``
-to point to a quorum backend such as cache based one provided by Sygyzy
+In order to use the ``--quorum`` feature you must configure the ``MIGRATE_QUORUM_BACKEND``
+setting to point to a quorum backend such as cache based one provided by Sygyzy
 
 .. code:: python
 
-    # settings.py
-
     MIGRATE_QUORUM_BACKEND = 'syzygy.quorum.backends.cache.CacheQuorum'
 
-	# or
+or
+
+.. code:: python
 
     CACHES = {
         ...,
-        'quorum',
+        'quorum': {
+            ...
+        },
     }
-	MIGRATE_QUORUM_BACKEND = {
+    MIGRATE_QUORUM_BACKEND = {
         'backend': 'syzygy.quorum.backends.cache.CacheQuorum',
         'alias': 'quorum',
-	}
+    }
 
 .. note::
 
