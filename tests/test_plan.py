@@ -12,9 +12,36 @@ from syzygy.plan import (
     get_migration_stage,
     get_operation_stage,
     get_pre_deploy_plan,
+    hash_plan,
     must_post_deploy_migration,
     partition_operations,
 )
+
+
+class HashPlanTests(SimpleTestCase):
+    def test_stable(self):
+        plan = [(Migration("0001_initial", "tests"), True)]
+        self.assertEqual(hash_plan(plan), "a4a35230c7d1942265f1bc8f9ce53e05a50848be")
+
+    def test_order(self):
+        first = (Migration("0001_initial", "tests"), True)
+        second = (Migration("0002_second", "tests"), True)
+        self.assertNotEqual(hash_plan([first, second]), hash_plan([second, first]))
+
+    def test_backward(self):
+        forward = (Migration("0001_initial", "tests"), True)
+        backward = (Migration("0001_initial", "tests"), False)
+        self.assertNotEqual(hash_plan([forward]), hash_plan([backward]))
+
+    def test_migration_name(self):
+        first = (Migration("0001_initial", "tests"), True)
+        second = (Migration("0002_second", "tests"), True)
+        self.assertNotEqual(hash_plan([first]), hash_plan([second]))
+
+    def test_app_label(self):
+        test_app = (Migration("0001_initial", "tests"), True)
+        other_app = (Migration("0001_initial", "other"), True)
+        self.assertNotEqual(hash_plan([test_app]), hash_plan([other_app]))
 
 
 class GetOperationStageTests(SimpleTestCase):

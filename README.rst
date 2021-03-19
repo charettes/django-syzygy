@@ -131,6 +131,56 @@ disabled by setting it to ``None``.
 
 .. _`Python module`: https://docs.python.org/3/library/site.html
 
+Migration quorum
+----------------
+
+When deploying migrations to multiple clusters sharing the same database it's
+important that:
+
+1. Migrations are applied only once
+2. Pre-deployment migrations are applied before deployment in any clusters is
+   takes place
+3. Post-deployment migrations are only applied once all clusters are done
+   deploying
+
+The built-in `migrate` command doesn't offer any guarantees with regards to
+serializability of invocations, in other words naively calling `migrate` from
+multiple clusters before or after a deployment could cause some migrations to
+be attempted to be applied twice.
+
+To circumvent this limitation Syzygy introduces a `--quorum <N:int>` flag to the
+`migrate` command that allow clusters coordination to take place.
+
+When specified the `migrate --quorum <N:int>` command will wait for at least
+`N` number invocations of `migrate` for the planed migrations before proceeding
+with applying them once and blocking on all callers until the operation completes.
+
+In order to use the `--quorum` feature you must configure `MIGRATE_QUORUM_BACKEND`
+to point to a quorum backend such as cache based one provided by Sygyzy
+
+.. code:: python
+	# settings.py
+
+    MIGRATE_QUORUM_BACKEND = 'syzygy.quorum.backends.cache.CacheQuorum'
+
+	# or
+
+    CACHES = {
+        ...,
+        'quorum',
+    }
+	MIGRATE_QUORUM_BACKEND = {
+        'backend': 'syzygy.quorum.backends.cache.CacheQuorum',
+        'alias': 'quorum',
+	}
+
+.. note::
+
+  In order for `CacheQuorum` to work properly in a distributed environment it
+  must be pointed at a backend that supports atomic `incr` operations such as
+  Memcached or Redis.
+
+
 Development
 -----------
 

@@ -1,3 +1,4 @@
+import hashlib
 from typing import Dict, List, Optional, Tuple
 
 from django.db.migrations import DeleteModel, Migration, RemoveField
@@ -8,6 +9,13 @@ from .constants import Stage
 from .exceptions import AmbiguousPlan, AmbiguousStage
 
 Plan = List[Tuple[Migration, bool]]
+
+
+def hash_plan(plan: Plan) -> str:
+    """Return a stable hash from a migration plan."""
+    return hashlib.sha1(
+        ";".join(f"{migration}:{backward}" for migration, backward in plan).encode()
+    ).hexdigest()
 
 
 def get_operation_stage(operation: Operation) -> Stage:
