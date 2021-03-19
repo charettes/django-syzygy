@@ -159,7 +159,8 @@ In order to use the ``--quorum`` feature you must configure ``MIGRATE_QUORUM_BAC
 to point to a quorum backend such as cache based one provided by Sygyzy
 
 .. code:: python
-	# settings.py
+
+    # settings.py
 
     MIGRATE_QUORUM_BACKEND = 'syzygy.quorum.backends.cache.CacheQuorum'
 
