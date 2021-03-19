@@ -143,19 +143,19 @@ important that:
 3. Post-deployment migrations are only applied once all clusters are done
    deploying
 
-The built-in `migrate` command doesn't offer any guarantees with regards to
-serializability of invocations, in other words naively calling `migrate` from
+The built-in ``migrate`` command doesn't offer any guarantees with regards to
+serializability of invocations, in other words naively calling ``migrate`` from
 multiple clusters before or after a deployment could cause some migrations to
 be attempted to be applied twice.
 
-To circumvent this limitation Syzygy introduces a `--quorum <N:int>` flag to the
-`migrate` command that allow clusters coordination to take place.
+To circumvent this limitation Syzygy introduces a ``--quorum <N:int>`` flag to the
+``migrate`` command that allow clusters coordination to take place.
 
-When specified the `migrate --quorum <N:int>` command will wait for at least
-`N` number invocations of `migrate` for the planed migrations before proceeding
+When specified the ``migrate --quorum <N:int>`` command will wait for at least
+``N`` number invocations of ``migrate`` for the planned migrations before proceeding
 with applying them once and blocking on all callers until the operation completes.
 
-In order to use the `--quorum` feature you must configure `MIGRATE_QUORUM_BACKEND`
+In order to use the ``--quorum`` feature you must configure ``MIGRATE_QUORUM_BACKEND``
 to point to a quorum backend such as cache based one provided by Sygyzy
 
 .. code:: python
@@ -176,8 +176,8 @@ to point to a quorum backend such as cache based one provided by Sygyzy
 
 .. note::
 
-  In order for `CacheQuorum` to work properly in a distributed environment it
-  must be pointed at a backend that supports atomic `incr` operations such as
+  In order for ``CacheQuorum`` to work properly in a distributed environment it
+  must be pointed at a backend that supports atomic ``incr`` operations such as
   Memcached or Redis.
 
 
