@@ -84,19 +84,19 @@ class MigrateQuorumTests(BaseMigrateTests):
         apply_stdouts = []
         for stdout in stdouts:
             if stdout.startswith(
-                "Reached pre-migration quorum, proceeding with planned migrations..."
+                "Reached pre-migrate quorum, proceeding with planned migrations..."
             ):
                 apply_stdouts.append(stdout)
-                self.assertIn("Reached post-migration quorum after", stdout)
+                self.assertIn("Reached post-migrate quorum after", stdout)
             else:
                 self.assertTrue(
-                    stdout.startswith("Waiting for pre-migration quorum...")
+                    stdout.startswith("Waiting for pre-migrate quorum...")
                 )
-                self.assertIn("Reached pre-migration quorum after", stdout)
+                self.assertIn("Reached pre-migrate quorum after", stdout)
                 self.assertIn(
                     "Waiting for migrations to be applied by remote party...", stdout
                 )
-                self.assertIn("Reached post-migration quorum after", stdout)
+                self.assertIn("Reached post-migrate quorum after", stdout)
                 self.assertIn("Migrations applied by remote party", stdout)
         if not apply_stdouts:
             self.fail("Migrations were not applied")

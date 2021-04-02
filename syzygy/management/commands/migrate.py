@@ -180,29 +180,29 @@ class Command(migrate.Command):
         if join_quorum(pre_namespace, quorum):
             if verbosity:
                 self.stdout.write(
-                    "Reached pre-migration quorum, proceeding with planned migrations..."
+                    "Reached pre-migrate quorum, proceeding with planned migrations..."
                 )
             yield True
             join_quorum(post_namespace, quorum)
             if verbosity:
-                self.stdout.write("Waiting for post-migration quorum...")
+                self.stdout.write("Waiting for post-migrate quorum...")
             duration = self._poll_until_quorum(post_namespace, quorum, quorum_timeout)
             if verbosity:
                 self.stdout.write(
-                    f"Reached post-migration quorum after {duration:.2f}s..."
+                    f"Reached post-migrate quorum after {duration:.2f}s..."
                 )
             return
         yield False
         if verbosity:
-            self.stdout.write("Waiting for pre-migration quorum...")
+            self.stdout.write("Waiting for pre-migrate quorum...")
         duration = self._poll_until_quorum(pre_namespace, quorum, quorum_timeout)
         if verbosity:
-            self.stdout.write(f"Reached pre-migration quorum after {duration:.2f}s...")
+            self.stdout.write(f"Reached pre-migrate quorum after {duration:.2f}s...")
             self.stdout.write("Waiting for migrations to be applied by remote party...")
         join_quorum(post_namespace, quorum)
         duration = self._poll_until_quorum(post_namespace, quorum, quorum_timeout)
         if verbosity:
-            self.stdout.write(f"Reached post-migration quorum after {duration:.2f}s...")
+            self.stdout.write(f"Reached post-migrate quorum after {duration:.2f}s...")
             self.stdout.write("Migrations applied by remote party")
         return
 
