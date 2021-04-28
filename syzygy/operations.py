@@ -121,10 +121,6 @@ class PreRemoveField(migrations.AlterField):
             )
         return "Set field %s of %s NULLable" % (self.name, self.model_name)
 
-    def deconstruct(self):
-        _, args, kwargs = super().deconstruct()
-        return f"{__name__}.{self.__class__.__name__}", args, kwargs
-
 
 class AddField(migrations.AddField):
     """
@@ -169,10 +165,6 @@ class AddField(migrations.AddField):
             return super().database_forwards(
                 app_label, schema_editor, from_state, to_state
             )
-
-    def deconstruct(self):
-        _, args, kwargs = super().deconstruct()
-        return f"{__name__}.{self.__class__.__name__}", args, kwargs
 
 
 class PostAddField(migrations.AlterField):
@@ -224,7 +216,3 @@ class PostAddField(migrations.AlterField):
             self.name,
             self.model_name,
         )
-
-    def deconstruct(self):
-        _, args, kwargs = super().deconstruct()
-        return f"{__name__}.{self.__class__.__name__}", args, kwargs

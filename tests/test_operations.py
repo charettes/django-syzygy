@@ -3,6 +3,7 @@ from typing import List, Optional, Tuple
 from django.db import connection, migrations, models
 from django.db.migrations.operations.base import Operation
 from django.db.migrations.optimizer import MigrationOptimizer
+from django.db.migrations.serializer import OperationSerializer
 from django.db.migrations.state import ProjectState
 from django.db.models.fields import NOT_PROVIDED
 from django.test import TestCase
@@ -85,11 +86,15 @@ class AddFieldTests(OperationTestCase):
         self.assertEqual(
             operation.deconstruct(),
             (
-                "syzygy.operations.AddField",
+                "AddField",
                 [],
                 {"model_name": model_name, "name": field_name, "field": field},
             ),
         )
+        serializer = OperationSerializer(operation)
+        serialized, imports = serializer.serialize()
+        self.assertTrue(serialized.startswith("syzygy.operations.AddField"))
+        self.assertIn("import syzygy.operations", imports)
 
 
 class PostAddFieldTests(OperationTestCase):
@@ -185,11 +190,15 @@ class PostAddFieldTests(OperationTestCase):
         self.assertEqual(
             operation.deconstruct(),
             (
-                "syzygy.operations.PostAddField",
+                "PostAddField",
                 [],
                 {"model_name": model_name, "name": field_name, "field": field},
             ),
         )
+        serializer = OperationSerializer(operation)
+        serialized, imports = serializer.serialize()
+        self.assertTrue(serialized.startswith("syzygy.operations.PostAddField"))
+        self.assertIn("import syzygy.operations", imports)
 
     def test_reduce(self):
         model_name = "TestModel"
@@ -276,19 +285,23 @@ class PreRemoveFieldTests(OperationTestCase):
         model_name = "TestModel"
         field_name = "foo"
         field = models.IntegerField(default=42)
-        operations = PreRemoveField(
+        operation = PreRemoveField(
             model_name,
             field_name,
             field,
         )
         self.assertEqual(
-            operations.deconstruct(),
+            operation.deconstruct(),
             (
-                "syzygy.operations.PreRemoveField",
+                "PreRemoveField",
                 [],
                 {"model_name": model_name, "name": field_name, "field": field},
             ),
         )
+        serializer = OperationSerializer(operation)
+        serialized, imports = serializer.serialize()
+        self.assertTrue(serialized.startswith("syzygy.operations.PreRemoveField"))
+        self.assertIn("import syzygy.operations", imports)
 
     def test_elidable(self):
         model_name = "TestModel"
