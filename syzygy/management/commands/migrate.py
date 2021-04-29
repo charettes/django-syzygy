@@ -33,11 +33,11 @@ def _patch_executor(stage: Stage):
     doesn't allow it to be overridden in any other way.
     """
     if stage is Stage.PRE_DEPLOY:
-        migrate.MigrationExecutor = PreDeployMigrationExecutor
+        migrate.MigrationExecutor = PreDeployMigrationExecutor  # type: ignore
     try:
         yield
     finally:
-        migrate.MigrationExecutor = MigrationExecutor
+        migrate.MigrationExecutor = MigrationExecutor  # type: ignore
 
 
 class Command(migrate.Command):
@@ -206,7 +206,7 @@ class Command(migrate.Command):
             self.stdout.write("Migrations applied by remote party")
         return
 
-    def handle(
+    def handle(  # type: ignore
         self,
         *args,
         stage: Stage,
