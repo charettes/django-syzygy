@@ -6,7 +6,7 @@ with open("README.rst") as file_:
 
 setup(
     name="django-syzygy",
-    version="0.1.0a7",
+    version="0.1.0a8",
     description="",
     long_description=long_description,
     long_description_content_type="text/x-rst",
