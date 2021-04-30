@@ -73,8 +73,8 @@ class BaseQuorumTestMixin:
         with ThreadPool(processes=quorum) as pool:
             results = pool.map_async(achieve_quorum, [str(uuid.uuid4())] * quorum).get()
 
-        self.assertTrue(all(result is False for result in results[:-1]))
-        self.assertIs(results[-1], True)
+        self.assertEqual(sum(1 for result in results if result is True), 1)
+        self.assertEqual(sum(1 for result in results if result is False), 4)
 
 
 @override_settings(MIGRATION_QUORUM_BACKEND="syzygy.quorum.backends.cache.CacheQuorum")
