@@ -49,10 +49,6 @@ class QuorumConfigurationTests(SimpleTestCase):
 
 
 class BaseQuorumTestMixin:
-    def test_single(self):
-        namespace = str(uuid.uuid4())
-        self.assertTrue(join_quorum(namespace, 1))
-
     def test_multiple(self):
         namespace = str(uuid.uuid4())
         self.assertFalse(join_quorum(namespace, 2))
@@ -75,6 +71,16 @@ class BaseQuorumTestMixin:
 
         self.assertEqual(sum(1 for result in results if result is True), 1)
         self.assertEqual(sum(1 for result in results if result is False), 4)
+
+    def test_namespace_reuse(self):
+        namespace = str(uuid.uuid4())
+        self.assertFalse(join_quorum(namespace, 2))
+        self.assertTrue(join_quorum(namespace, 2))
+        self.assertTrue(poll_quorum(namespace, 2))
+        # Once quorum is reached its associated is immediately cleared and reusable.
+        self.assertFalse(join_quorum(namespace, 2))
+        self.assertTrue(join_quorum(namespace, 2))
+        self.assertTrue(poll_quorum(namespace, 2))
 
 
 @override_settings(MIGRATION_QUORUM_BACKEND="syzygy.quorum.backends.cache.CacheQuorum")

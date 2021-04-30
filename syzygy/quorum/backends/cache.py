@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 from django.core.cache import DEFAULT_CACHE_ALIAS, caches
 
@@ -6,7 +6,7 @@ from .base import QuorumBase
 
 
 class CacheQuorum(QuorumBase):
-    cache_key_format = "syzygy-quorum:{namespace}"
+    namespace_key_format = "syzygy-quorum:{namespace}"
 
     def __init__(
         self,
@@ -18,13 +18,38 @@ class CacheQuorum(QuorumBase):
         self.timeout = timeout
         self.version = version
 
+    @classmethod
+    def _get_namespace_keys(cls, namespace: str) -> Tuple[str, str]:
+        namespace_key = cls.namespace_key_format.format(namespace=namespace)
+        clear_namespace_key = f"{namespace_key}:clear"
+        return namespace_key, clear_namespace_key
+
+    def _clear(self, namespace: str):
+        self.cache.delete_many(
+            self._get_namespace_keys(namespace), version=self.version
+        )
+
     def join(self, namespace: str, quorum: int) -> bool:
         """Join the `namespace` and return whether or not `quorum` was reached."""
-        cache_key = self.cache_key_format.format(namespace=namespace)
-        self.cache.add(cache_key, 0, timeout=self.timeout, version=self.version)
-        return self.cache.incr(cache_key, version=self.version) == quorum
+        namespace_key, clear_namespace_key = self._get_namespace_keys(namespace)
+        self.cache.add(namespace_key, 0, timeout=self.timeout, version=self.version)
+        self.cache.add(
+            clear_namespace_key,
+            quorum - 1,
+            timeout=self.timeout,
+            version=self.version,
+        )
+        current = self.cache.incr(namespace_key, version=self.version)
+        if current == quorum:
+            return True
+        return False
 
     def poll(self, namespace: str, quorum: int) -> bool:
         """Return whether or not `namespace`'s `quorum` was reached."""
-        cache_key = self.cache_key_format.format(namespace=namespace)
-        return self.cache.get(cache_key, version=self.version) == quorum
+        namespace_key, clear_namespace_key = self._get_namespace_keys(namespace)
+        current = self.cache.get(namespace_key, version=self.version)
+        if current == quorum:
+            if self.cache.decr(clear_namespace_key, version=self.version) == 0:
+                self._clear(namespace)
+            return True
+        return False
