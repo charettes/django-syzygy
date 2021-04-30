@@ -5,6 +5,10 @@ class QuorumBase(ABC):
     """
     An abstraction to allow multiple clusters to obtain quorum before
     proceeding with deployment stage.
+
+    For a particular `namespace` the `join` method must be called
+    `quorum` times and `poll` must be called ``quorum - 1`` times or
+    for each member that got returned `False` when calling `join`.
     """
 
     @abstractmethod

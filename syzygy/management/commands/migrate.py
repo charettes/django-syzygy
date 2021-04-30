@@ -152,6 +152,13 @@ class Command(migrate.Command):
             time.sleep(1)
         return time.monotonic() - started_at
 
+    def _join_or_poll_until_quorum(
+        self, namespace: str, quorum: int, quorum_timeout: int
+    ) -> float:
+        if join_quorum(namespace, quorum):
+            return 0
+        return self._poll_until_quorum(namespace, quorum, quorum_timeout)
+
     @contextmanager
     def _handle_quorum(
         self, quorum: int, quorum_timeout: int, options: dict
@@ -183,10 +190,11 @@ class Command(migrate.Command):
                     "Reached pre-migrate quorum, proceeding with planned migrations..."
                 )
             yield True
-            join_quorum(post_namespace, quorum)
             if verbosity:
                 self.stdout.write("Waiting for post-migrate quorum...")
-            duration = self._poll_until_quorum(post_namespace, quorum, quorum_timeout)
+            duration = self._join_or_poll_until_quorum(
+                post_namespace, quorum, quorum_timeout
+            )
             if verbosity:
                 self.stdout.write(
                     f"Reached post-migrate quorum after {duration:.2f}s..."
@@ -199,8 +207,9 @@ class Command(migrate.Command):
         if verbosity:
             self.stdout.write(f"Reached pre-migrate quorum after {duration:.2f}s...")
             self.stdout.write("Waiting for migrations to be applied by remote party...")
-        join_quorum(post_namespace, quorum)
-        duration = self._poll_until_quorum(post_namespace, quorum, quorum_timeout)
+        duration = self._join_or_poll_until_quorum(
+            post_namespace, quorum, quorum_timeout
+        )
         if verbosity:
             self.stdout.write(f"Reached post-migrate quorum after {duration:.2f}s...")
             self.stdout.write("Migrations applied by remote party")
