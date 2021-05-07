@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 
-from django.db import migrations
+from django.db.migrations import operations
 from django.db.models.fields import NOT_PROVIDED
 
 from .constants import Stage
@@ -61,7 +61,7 @@ def _include_column_default(schema_editor, field_name):
         schema_editor.column_sql = column_sql_
 
 
-class PreRemoveField(migrations.AlterField):
+class PreRemoveField(operations.AlterField):
     """
     Perform database operations required to make sure an application with a
     rolling deployment won't crash prior to a field removal.
@@ -95,7 +95,7 @@ class PreRemoveField(migrations.AlterField):
         else:
             nullable_field = field.clone()
             nullable_field.null = True
-            operation = migrations.AlterField(
+            operation = operations.AlterField(
                 self.model_name, self.name, nullable_field
             )
             operation.state_forwards(app_label, to_state)
@@ -122,7 +122,7 @@ class PreRemoveField(migrations.AlterField):
         return "Set field %s of %s NULLable" % (self.name, self.model_name)
 
 
-class AddField(migrations.AddField):
+class AddField(operations.AddField):
     """
     Subclass of `AddField` that preserves the database default on database
     application.
@@ -167,7 +167,7 @@ class AddField(migrations.AddField):
             )
 
 
-class PostAddField(migrations.AlterField):
+class PostAddField(operations.AlterField):
     """
     Elidable operation that drops a previously preserved database default.
     """
