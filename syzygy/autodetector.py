@@ -16,7 +16,7 @@ from .operations import AddField, PostAddField, PreRemoveField
 from .plan import partition_operations
 
 
-class Stage(Operation):
+class OperationStage(Operation):
     """
     Fake operation that serves as a placeholder to break operations into
     multiple migrations.
@@ -35,12 +35,12 @@ class MigrationAutodetector(_MigrationAutodetector):
 
     By creating a chain of external application dependencies between operations::
 
-        app.FirstOperation -> __stage__.Stage -> app.SecondOperation
+        app.FirstOperation -> __stage__.OperationStage -> app.SecondOperation
 
     The auto-detector will generate a sequence of migrations of the form::
 
         app.Migration1(operations=[FirstOperation])
-        __stage__.Migration1(operations=[Stage])
+        __stage__.Migration1(operations=[OperationStage])
         app.Migration2(operations=[FirstOperation])
 
     And automatically remove the __stage__ migrations since it's a not
@@ -59,7 +59,7 @@ class MigrationAutodetector(_MigrationAutodetector):
         super()._generate_added_field(app_label, model_name, field_name)
         add_field = self.generated_operations[app_label][-1]
         add_field.__class__ = AddField
-        stage = Stage()
+        stage = OperationStage()
         self.add_operation(
             self.STAGE_SPLIT,
             stage,
@@ -116,7 +116,7 @@ class MigrationAutodetector(_MigrationAutodetector):
             model_name=model_name, name=field_name, field=field
         )
         self.add_operation(app_label, pre_remove_field)
-        stage = Stage()
+        stage = OperationStage()
         self.add_operation(
             self.STAGE_SPLIT,
             stage,
@@ -183,7 +183,7 @@ class MigrationAutodetector(_MigrationAutodetector):
                         sys.exit(3)
                 continue
             if pre_operations and post_operations:
-                stage = Stage()
+                stage = OperationStage()
                 self.add_operation(
                     self.STAGE_SPLIT,
                     stage,
