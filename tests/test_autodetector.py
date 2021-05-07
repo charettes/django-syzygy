@@ -1,20 +1,32 @@
 from typing import List, Optional
 from unittest import mock
 
+from django.core.management.color import color_style
 from django.db import migrations, models
-from django.db.migrations.questioner import MigrationQuestioner
+from django.db.migrations.questioner import (
+    InteractiveMigrationQuestioner,
+    MigrationQuestioner,
+)
 from django.db.migrations.state import ModelState, ProjectState
 from django.test import TestCase
-from django.test.utils import captured_stderr
+from django.test.utils import captured_stderr, captured_stdin, captured_stdout
 
 from syzygy.autodetector import MigrationAutodetector
 from syzygy.constants import Stage
 from syzygy.exceptions import AmbiguousStage
-from syzygy.operations import AddField, PostAddField, PreRemoveField
+from syzygy.operations import (
+    AddField,
+    PostAddField,
+    PreRemoveField,
+    RenameField,
+    RenameModel,
+)
 from syzygy.plan import get_migration_stage
 
 
-class AutodetectorTests(TestCase):
+class AutodetectorTestCase(TestCase):
+    style = color_style()
+
     @staticmethod
     def make_project_state(model_states: List[ModelState]) -> ProjectState:
         project_state = ProjectState()
@@ -32,10 +44,13 @@ class AutodetectorTests(TestCase):
             self.make_project_state(before_states),
             self.make_project_state(after_states),
             questioner=questioner,
+            style=self.style,
         )._detect_changes()
         self.assertNotIn(MigrationAutodetector.STAGE_SPLIT, changes)
         return changes
 
+
+class AutodetectorTests(AutodetectorTestCase):
     def test_field_addition(self):
         from_model = ModelState("tests", "Model", [])
         to_model = ModelState(
@@ -191,4 +206,177 @@ class AutodetectorTests(TestCase):
         self.assertIn(
             "- Remove field foo from bar",
             stderr.getvalue(),
+        )
+
+    def test_field_rename(self):
+        from_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("foo", models.BooleanField(default=False)),
+                ],
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("bar", models.BooleanField(default=False)),
+                ],
+            ),
+        ]
+        questioner = MigrationQuestioner({"ask_rename": True})
+        with captured_stderr(), self.assertRaisesMessage(SystemExit, "3"):
+            self.get_changes(from_models, to_models, questioner)["tests"]
+        # Pre-deploy rename.
+        questioner.defaults["ask_rename_field_stage"] = 1
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], RenameField)
+        # Post-deploy rename.
+        questioner.defaults["ask_rename_field_stage"] = 2
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], RenameField)
+
+    def test_model_rename(self):
+        from_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                ],
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Bar",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                ],
+            ),
+        ]
+        questioner = MigrationQuestioner(
+            {
+                "ask_rename_model": True,
+            }
+        )
+        with captured_stderr(), self.assertRaisesMessage(SystemExit, "3"):
+            self.get_changes(from_models, to_models, questioner)["tests"]
+        # Pre-deploy rename.
+        questioner.defaults["ask_rename_model_stage"] = 1
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], RenameModel)
+        # Post-deploy rename.
+        questioner.defaults["ask_rename_model_stage"] = 2
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], RenameModel)
+        # db_table override
+        to_models[0].options["db_table"] = "tests_foo"
+        changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], migrations.RenameModel)
+
+
+class InteractiveAutodetectorTests(AutodetectorTestCase):
+    def test_field_rename(self):
+        from_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("foo", models.BooleanField(default=False)),
+                ],
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("bar", models.BooleanField(default=False)),
+                ],
+            ),
+        ]
+        questioner = InteractiveMigrationQuestioner()
+        with captured_stdin() as stdin, captured_stdout() as stdout, captured_stderr() as stderr:
+            stdin.write("y\n2\n")
+            stdin.seek(0)
+            self.get_changes(from_models, to_models, questioner)
+        self.assertIn(
+            self.style.WARNING(
+                "Renaming a column from a database table actively relied upon might cause downtime during deployment."
+            ),
+            stderr.getvalue(),
+        )
+        self.assertIn(
+            "1) Quit, and let me add a new foo.bar field meant to be backfilled with foo.foo values",
+            stdout.getvalue(),
+        )
+        self.assertIn(
+            self.style.MIGRATE_LABEL(
+                "This might cause downtime if your assumption is wrong"
+            ),
+            stdout.getvalue(),
+        )
+
+    def test_model_rename(self):
+        from_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                ],
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Bar",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                ],
+            ),
+        ]
+        questioner = InteractiveMigrationQuestioner()
+        with captured_stdin() as stdin, captured_stdout() as stdout, captured_stderr() as stderr:
+            stdin.write("y\n2\n")
+            stdin.seek(0)
+            self.get_changes(from_models, to_models, questioner)
+        self.assertIn(
+            self.style.WARNING(
+                "Renaming an actively relied on database table might cause downtime during deployment."
+            ),
+            stderr.getvalue(),
+        )
+        self.assertIn(
+            '1) Quit, and let me manually set tests.Bar.Meta.db_table to "tests_foo" to avoid '
+            "renaming its underlying table",
+            stdout.getvalue(),
+        )
+        self.assertIn(
+            self.style.MIGRATE_LABEL(
+                "This might cause downtime if your assumption is wrong"
+            ),
+            stdout.getvalue(),
         )

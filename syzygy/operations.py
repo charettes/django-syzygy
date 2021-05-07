@@ -216,3 +216,36 @@ class PostAddField(operations.AlterField):
             self.name,
             self.model_name,
         )
+
+
+class StagedOperation(operations.base.Operation):
+    stage: Stage
+
+    def __init__(self, *args, **kwargs):
+        self.stage = kwargs.pop("stage")
+        super().__init__(*args, **kwargs)
+
+    @classmethod
+    def for_stage(cls, operation: operations.base.Operation, stage: Stage):
+        _, args, kwargs = operation.deconstruct()
+        kwargs["stage"] = stage
+        return cls(*args, **kwargs)
+
+    def deconstruct(self):
+        name, args, kwargs = super().deconstruct()
+        kwargs["stage"] = self.stage
+        return name, args, kwargs
+
+
+class RenameField(StagedOperation, operations.RenameField):
+    """
+    Subclass of ``RenameField`` that explicitly defines a stage for the rare
+    instances where a rename operation is safe to perform.
+    """
+
+
+class RenameModel(StagedOperation, operations.RenameModel):
+    """
+    Subclass of ``RenameModel`` that explicitly defines a stage for the rare
+    instances where a rename operation is safe to perform.
+    """

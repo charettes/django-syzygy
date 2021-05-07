@@ -1,3 +1,5 @@
+from functools import partial
+
 from django.core.management.commands import makemigrations  # type: ignore
 
 from syzygy.autodetector import MigrationAutodetector
@@ -21,7 +23,9 @@ class Command(makemigrations.Command):
         # Monkey-patch makemigrations.MigrationAutodetector since the command
         # doesn't allow it to be overridden in any other way.
         MigrationAutodetector_ = makemigrations.MigrationAutodetector
-        makemigrations.MigrationAutodetector = MigrationAutodetector
+        makemigrations.MigrationAutodetector = partial(
+            MigrationAutodetector, style=self.style
+        )
         try:
             super().handle(*args, **options)
         finally:

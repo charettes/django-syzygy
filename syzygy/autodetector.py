@@ -11,8 +11,15 @@ from django.db.models.fields import NOT_PROVIDED
 from django.utils.functional import cached_property
 
 from .compat import get_model_state_field
+from .constants import Stage
 from .exceptions import AmbiguousStage
-from .operations import AddField, PostAddField, PreRemoveField
+from .operations import (
+    AddField,
+    PostAddField,
+    PreRemoveField,
+    RenameField,
+    RenameModel,
+)
 from .plan import partition_operations
 
 
@@ -49,11 +56,104 @@ class MigrationAutodetector(_MigrationAutodetector):
 
     STAGE_SPLIT = "__stage__"
 
+    def __init__(self, *args, **kwargs):
+        self.style = kwargs.pop("style", None)
+        super().__init__(*args, **kwargs)
+
     @cached_property
     def has_interactive_questionner(self) -> bool:
         return not self.questioner.dry_run and isinstance(
             self.questioner, InteractiveMigrationQuestioner
         )
+
+    def add_operation(self, app_label, operation, dependencies=None, beginning=False):
+        if isinstance(operation, operations.RenameField):
+            print(
+                self.style.WARNING(
+                    "Renaming a column from a database table actively relied upon might cause downtime "
+                    "during deployment.",
+                ),
+                file=sys.stderr,
+            )
+            choice = self.questioner.defaults.get("ask_rename_field_stage", 0)
+            if self.has_interactive_questionner:
+                choice = self.questioner._choice_input(
+                    "Please choose an appropriate action to take:",
+                    [
+                        (
+                            f"Quit, and let me add a new {operation.model_name}.{operation.new_name} field meant "
+                            f"to be backfilled with {operation.model_name}.{operation.old_name} values"
+                        ),
+                        (
+                            f"Assume the currently deployed code doesn't reference {app_label}.{operation.model_name} "
+                            f"on reachable code paths and mark the operation to be applied before deployment. "
+                            + self.style.MIGRATE_LABEL(
+                                "This might cause downtime if your assumption is wrong",
+                            )
+                        ),
+                        (
+                            f"Assume the newly deployed code doesn't reference {app_label}.{operation.model_name} on "
+                            "reachable code paths and mark the operation to be applied after deployment. "
+                            + self.style.MIGRATE_LABEL(
+                                "This might cause downtime if your assumption is wrong",
+                            )
+                        ),
+                    ],
+                )
+            if choice == 0:
+                sys.exit(3)
+            else:
+                stage = Stage.PRE_DEPLOY if choice == 1 else Stage.POST_DEPLOY
+                operation = RenameField.for_stage(operation, stage)
+        if isinstance(operation, operations.RenameModel):
+            from_db_table = (
+                self.from_state.models[app_label, operation.old_name_lower].options.get(
+                    "db_table"
+                )
+                or f"{app_label}_{operation.old_name_lower}"
+            )
+            to_db_table = self.to_state.models[
+                app_label, operation.new_name_lower
+            ].options.get("db_table")
+            if from_db_table != to_db_table:
+                print(
+                    self.style.WARNING(
+                        "Renaming an actively relied on database table might cause downtime during deployment."
+                    ),
+                    file=sys.stderr,
+                )
+                choice = self.questioner.defaults.get("ask_rename_model_stage", 0)
+                if self.has_interactive_questionner:
+                    choice = self.questioner._choice_input(
+                        "Please choose an appropriate action to take:",
+                        [
+                            (
+                                f"Quit, and let me manually set {app_label}.{operation.new_name}.Meta.db_table to "
+                                f'"{from_db_table}" to avoid renaming its underlying table'
+                            ),
+                            (
+                                f"Assume the currently deployed code doesn't reference "
+                                f"{app_label}.{operation.old_name} on reachable code paths and mark the operation to "
+                                "be applied before the deployment. "
+                                + self.style.MIGRATE_LABEL(
+                                    "This might cause downtime if your assumption is wrong",
+                                )
+                            ),
+                            (
+                                f"Assume the newly deployed code doesn't reference {app_label}.{operation.new_name} "
+                                "on reachable code paths and mark the operation to be applied after the deployment. "
+                                + self.style.MIGRATE_LABEL(
+                                    "This might cause downtime if your assumption is wrong",
+                                )
+                            ),
+                        ],
+                    )
+                if choice == 0:
+                    sys.exit(3)
+                else:
+                    stage = Stage.PRE_DEPLOY if choice == 1 else Stage.POST_DEPLOY
+                    operation = RenameModel.for_stage(operation, stage)
+        super().add_operation(app_label, operation, dependencies, beginning)
 
     def _generate_added_field(self, app_label, model_name, field_name):
         super()._generate_added_field(app_label, model_name, field_name)
