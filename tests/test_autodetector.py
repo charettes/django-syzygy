@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from unittest import mock
 
 from django.db import migrations, models
@@ -26,11 +26,8 @@ class AutodetectorTests(TestCase):
         self,
         before_states: List[ModelState],
         after_states: List[ModelState],
-        answers: Optional[Dict[str, Any]] = None,
+        questioner: Optional[MigrationQuestioner] = None,
     ) -> List[migrations.Migration]:
-        questioner = None
-        if answers:
-            questioner = MigrationQuestioner(defaults=answers)
         changes = MigrationAutodetector(
             self.make_project_state(before_states),
             self.make_project_state(after_states),
@@ -96,7 +93,7 @@ class AutodetectorTests(TestCase):
         from_model = ModelState("tests", "Model", [("field", models.IntegerField())])
         to_model = ModelState("tests", "Model", [])
         changes = self.get_changes(
-            [from_model], [to_model], answers={"ask_remove_default": 42}
+            [from_model], [to_model], MigrationQuestioner({"ask_remove_default": 42})
         )["tests"]
         self.assertEqual(len(changes), 2)
         self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
