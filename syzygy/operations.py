@@ -249,3 +249,9 @@ class RenameModel(StagedOperation, operations.RenameModel):
     Subclass of ``RenameModel`` that explicitly defines a stage for the rare
     instances where a rename operation is safe to perform.
     """
+
+
+class AlterField(StagedOperation, operations.AlterField):
+    """
+    Subclass of ``AlterField`` that allows explicitly defining a stage.
+    """

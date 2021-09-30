@@ -15,6 +15,7 @@ from .constants import Stage
 from .exceptions import AmbiguousStage
 from .operations import (
     AddField,
+    AlterField,
     PostAddField,
     PreRemoveField,
     RenameField,
@@ -153,6 +154,14 @@ class MigrationAutodetector(_MigrationAutodetector):
                 else:
                     stage = Stage.PRE_DEPLOY if choice == 1 else Stage.POST_DEPLOY
                     operation = RenameModel.for_stage(operation, stage)
+        elif isinstance(operation, operations.AlterField) and not operation.field.null:
+            # Addition of not-NULL constraints must be performed post-deployment.
+            from_null = get_model_state_field(
+                self.from_state.models[app_label, operation.model_name_lower],
+                operation.name,
+            ).null
+            if from_null:
+                operation = AlterField.for_stage(operation, Stage.POST_DEPLOY)
         super().add_operation(app_label, operation, dependencies, beginning)
 
     def _generate_added_field(self, app_label, model_name, field_name):
@@ -168,7 +177,7 @@ class MigrationAutodetector(_MigrationAutodetector):
         post_add_field = PostAddField(
             model_name=model_name, name=field_name, field=add_field.field
         )
-        self.add_operation(
+        super().add_operation(
             app_label,
             post_add_field,
             dependencies=[

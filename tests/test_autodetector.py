@@ -115,6 +115,15 @@ class AutodetectorTests(AutodetectorTestCase):
         self.assertEqual(changes[0].operations[0].field.default, 42)
         self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
 
+    def test_alter_field_null_to_not_null(self):
+        from_model = ModelState(
+            "tests", "Model", [("field", models.IntegerField(null=True))]
+        )
+        to_model = ModelState("tests", "Model", [("field", models.IntegerField())])
+        changes = self.get_changes([from_model], [to_model])["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
+
     def test_field_rename(self):
         from_models = [
             ModelState(
