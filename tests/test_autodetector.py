@@ -115,6 +115,94 @@ class AutodetectorTests(AutodetectorTestCase):
         self.assertEqual(changes[0].operations[0].field.default, 42)
         self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
 
+    def test_field_rename(self):
+        from_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("foo", models.BooleanField(default=False)),
+                ],
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("bar", models.BooleanField(default=False)),
+                ],
+            ),
+        ]
+        questioner = MigrationQuestioner({"ask_rename": True})
+        with captured_stderr(), self.assertRaisesMessage(SystemExit, "3"):
+            self.get_changes(from_models, to_models, questioner)["tests"]
+        # Pre-deploy rename.
+        questioner.defaults["ask_rename_field_stage"] = 1
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], RenameField)
+        # Post-deploy rename.
+        questioner.defaults["ask_rename_field_stage"] = 2
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], RenameField)
+
+    def test_model_rename(self):
+        from_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                ],
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Bar",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                ],
+            ),
+        ]
+        questioner = MigrationQuestioner(
+            {
+                "ask_rename_model": True,
+            }
+        )
+        with captured_stderr(), self.assertRaisesMessage(SystemExit, "3"):
+            self.get_changes(from_models, to_models, questioner)["tests"]
+        # Pre-deploy rename.
+        questioner.defaults["ask_rename_model_stage"] = 1
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], RenameModel)
+        # Post-deploy rename.
+        questioner.defaults["ask_rename_model_stage"] = 2
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], RenameModel)
+        # db_table override
+        to_models[0].options["db_table"] = "tests_foo"
+        changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], migrations.RenameModel)
+
+
+class AutodetectorStageTests(AutodetectorTestCase):
     def test_mixed_stage_same_app(self):
         from_models = [
             ModelState(
@@ -207,92 +295,6 @@ class AutodetectorTests(AutodetectorTestCase):
             "- Remove field foo from bar",
             stderr.getvalue(),
         )
-
-    def test_field_rename(self):
-        from_models = [
-            ModelState(
-                "tests",
-                "Foo",
-                [
-                    ("id", models.IntegerField(primary_key=True)),
-                    ("foo", models.BooleanField(default=False)),
-                ],
-            ),
-        ]
-        to_models = [
-            ModelState(
-                "tests",
-                "Foo",
-                [
-                    ("id", models.IntegerField(primary_key=True)),
-                    ("bar", models.BooleanField(default=False)),
-                ],
-            ),
-        ]
-        questioner = MigrationQuestioner({"ask_rename": True})
-        with captured_stderr(), self.assertRaisesMessage(SystemExit, "3"):
-            self.get_changes(from_models, to_models, questioner)["tests"]
-        # Pre-deploy rename.
-        questioner.defaults["ask_rename_field_stage"] = 1
-        with captured_stderr():
-            changes = self.get_changes(from_models, to_models, questioner)["tests"]
-        self.assertEqual(len(changes), 1)
-        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
-        self.assertIsInstance(changes[0].operations[0], RenameField)
-        # Post-deploy rename.
-        questioner.defaults["ask_rename_field_stage"] = 2
-        with captured_stderr():
-            changes = self.get_changes(from_models, to_models, questioner)["tests"]
-        self.assertEqual(len(changes), 1)
-        self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
-        self.assertIsInstance(changes[0].operations[0], RenameField)
-
-    def test_model_rename(self):
-        from_models = [
-            ModelState(
-                "tests",
-                "Foo",
-                [
-                    ("id", models.IntegerField(primary_key=True)),
-                ],
-            ),
-        ]
-        to_models = [
-            ModelState(
-                "tests",
-                "Bar",
-                [
-                    ("id", models.IntegerField(primary_key=True)),
-                ],
-            ),
-        ]
-        questioner = MigrationQuestioner(
-            {
-                "ask_rename_model": True,
-            }
-        )
-        with captured_stderr(), self.assertRaisesMessage(SystemExit, "3"):
-            self.get_changes(from_models, to_models, questioner)["tests"]
-        # Pre-deploy rename.
-        questioner.defaults["ask_rename_model_stage"] = 1
-        with captured_stderr():
-            changes = self.get_changes(from_models, to_models, questioner)["tests"]
-        self.assertEqual(len(changes), 1)
-        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
-        self.assertIsInstance(changes[0].operations[0], RenameModel)
-        # Post-deploy rename.
-        questioner.defaults["ask_rename_model_stage"] = 2
-        with captured_stderr():
-            changes = self.get_changes(from_models, to_models, questioner)["tests"]
-        self.assertEqual(len(changes), 1)
-        self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
-        self.assertIsInstance(changes[0].operations[0], RenameModel)
-        # db_table override
-        to_models[0].options["db_table"] = "tests_foo"
-        changes = self.get_changes(from_models, to_models, questioner)["tests"]
-        self.assertEqual(len(changes), 1)
-        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
-        self.assertIsInstance(changes[0].operations[0], migrations.RenameModel)
 
 
 class InteractiveAutodetectorTests(AutodetectorTestCase):
