@@ -359,3 +359,128 @@ class AlterField(StagedOperation, operations.AlterField):
             stage=stage,
             preserve_default=preserve_default,
         )
+
+
+class AliasOperationMixin:
+    @staticmethod
+    def _create_instead_of_triggers(schema_editor, view_db_name, new_model):
+        quote = schema_editor.quote_name
+        schema_editor.execute(
+            (
+                "CREATE TRIGGER {trigger_name} INSTEAD OF INSERT ON {view_db_name}\n"
+                "BEGIN\n"
+                "INSERT INTO {new_table}({fields}) VALUES({values});\n"
+                "END"
+            ).format(
+                trigger_name=f"{view_db_name}_insert",
+                view_db_name=quote(view_db_name),
+                new_table=quote(new_model._meta.db_table),
+                fields=", ".join(
+                    quote(field.column) for field in new_model._meta.local_fields
+                ),
+                values=", ".join(
+                    f"NEW.{quote(field.column)}"
+                    for field in new_model._meta.local_fields
+                ),
+            )
+        )
+        for field in new_model._meta.local_fields:
+            schema_editor.execute(
+                (
+                    "CREATE TRIGGER {trigger_name} INSTEAD OF UPDATE OF {column} ON {view_db_name}\n"
+                    "BEGIN\n"
+                    "UPDATE {new_table} SET {column}=NEW.{column} WHERE {pk}=NEW.{pk};\n"
+                    "END"
+                ).format(
+                    trigger_name=f"{view_db_name}_update_{field.column}",
+                    view_db_name=quote(view_db_name),
+                    new_table=quote(new_model._meta.db_table),
+                    column=quote(field.column),
+                    pk=quote(new_model._meta.pk.column),
+                )
+            )
+        schema_editor.execute(
+            (
+                "CREATE TRIGGER {trigger_name} INSTEAD OF DELETE ON {view_db_name}\n"
+                "BEGIN\n"
+                "DELETE FROM {new_table} WHERE {pk}=OLD.{pk};\n"
+                "END"
+            ).format(
+                trigger_name=f"{view_db_name}_delete",
+                view_db_name=quote(view_db_name),
+                new_table=quote(new_model._meta.db_table),
+                pk=quote(new_model._meta.pk.column),
+            )
+        )
+
+    @classmethod
+    def create_view(cls, schema_editor, view_db_name, new_model):
+        quote = schema_editor.quote_name
+        schema_editor.execute(
+            "CREATE VIEW {} AS SELECT * FROM {}".format(
+                quote(view_db_name), quote(new_model._meta.db_table)
+            )
+        )
+        if schema_editor.connection.vendor == "sqlite":
+            cls._create_instead_of_triggers(schema_editor, view_db_name, new_model)
+
+    @staticmethod
+    def drop_view(schema_editor, db_table):
+        schema_editor.execute("DROP VIEW {}".format(schema_editor.quote_name(db_table)))
+
+
+class AliasedRenameModel(AliasOperationMixin, operations.RenameModel):
+    stage = Stage.PRE_DEPLOY
+
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        new_model = to_state.apps.get_model(app_label, self.new_name)
+        alias = schema_editor.connection.alias
+        if not self.allow_migrate_model(alias, new_model):
+            return
+        old_model = from_state.apps.get_model(app_label, self.old_name)
+        view_db_name = old_model._meta.db_table
+        super().database_forwards(app_label, schema_editor, from_state, to_state)
+        self.create_view(schema_editor, view_db_name, new_model)
+
+    def database_backwards(self, app_label, schema_editor, from_state, to_state):
+        new_model = to_state.apps.get_model(app_label, self.old_name_lower)
+        alias = schema_editor.connection.alias
+        if not self.allow_migrate_model(alias, new_model):
+            return
+        self.drop_view(schema_editor, new_model._meta.db_table)
+        super().database_backwards(app_label, schema_editor, from_state, to_state)
+
+    def describe(self):
+        return "Rename model %s to %s while creating an alias for %s" % (
+            self.old_name,
+            self.new_name,
+            self.old_name,
+        )
+
+    def reduce(self, operation, app_label):
+        if (
+            isinstance(operation, UnaliasModel)
+            and operation.name_lower == self.new_name_lower
+        ):
+            return [operations.RenameModel(self.old_name, self.new_name)]
+        return super().reduce(operation, app_label)
+
+
+class UnaliasModel(AliasOperationMixin, operations.models.ModelOperation):
+    stage = Stage.POST_DEPLOY
+
+    def __init__(self, name, view_db_name):
+        self.view_db_name = view_db_name
+        super().__init__(name)
+
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, self.name)
+        if not self.allow_migrate_model(schema_editor.connection.alias, model):
+            return
+        self.drop_view(self.view_db_name)
+
+    def database_backwards(self, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, self.name)
+        if not self.allow_migrate_model(schema_editor.connection.alias, model):
+            return
+        self.create_view(schema_editor, self.view_db_name, model)
