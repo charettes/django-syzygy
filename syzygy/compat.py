@@ -7,7 +7,6 @@ if django.VERSION >= (3, 1):
     def get_model_state_field(model_state: ModelState, field_name: str) -> Field:
         return model_state.fields[field_name]  # type: ignore
 
-
 else:
 
     def get_model_state_field(model_state: ModelState, field_name: str) -> Field:
