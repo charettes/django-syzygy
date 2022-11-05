@@ -1,6 +1,7 @@
 from typing import List, Optional, Tuple
 
 from django.db import connection, migrations, models
+from django.db.migrations.operations import RenameModel
 from django.db.migrations.operations.base import Operation
 from django.db.migrations.optimizer import MigrationOptimizer
 from django.db.migrations.serializer import OperationSerializer
@@ -10,7 +11,13 @@ from django.test import TestCase
 
 from syzygy.autodetector import MigrationAutodetector
 from syzygy.constants import Stage
-from syzygy.operations import AddField, PostAddField, PreRemoveField
+from syzygy.operations import (
+    AddField,
+    AliasedRenameModel,
+    PostAddField,
+    PreRemoveField,
+    UnaliasModel,
+)
 from syzygy.plan import get_operation_stage
 
 
@@ -313,3 +320,65 @@ class PreRemoveFieldTests(OperationTestCase):
             migrations.RemoveField(model_name, field_name, field),
         ]
         self.assert_optimizes_to(operations, [operations[-1]])
+
+
+class AliasedRenameModelTests(OperationTestCase):
+    def test_describe(self):
+        self.assertEqual(
+            AliasedRenameModel("OldName", "NewName").describe(),
+            "Rename model OldName to NewName while creating an alias for OldName",
+        )
+
+    def _apply_forwards(self):
+        model_name = "TestModel"
+        field = models.IntegerField()
+        pre_state = self.apply_operations(
+            [
+                migrations.CreateModel(model_name, [("foo", field)]),
+            ]
+        )
+        new_model_name = "NewTestModel"
+        post_state = self.apply_operations(
+            [
+                AliasedRenameModel(model_name, new_model_name),
+            ],
+            pre_state,
+        )
+        return (pre_state, model_name), (post_state, new_model_name)
+
+    def test_database_forwards(self):
+        (pre_state, _), (post_state, new_model_name) = self._apply_forwards()
+        pre_model = pre_state.apps.get_model("tests", "testmodel")
+        pre_obj = pre_model.objects.create(foo=1)
+        if connection.vendor == "sqlite":
+            # SQLite doesn't allow the usage of RETURNING in INSTEAD OF INSERT
+            # triggers and thus the object has to be refetched.
+            pre_obj = pre_model.objects.latest("pk")
+        self.assertEqual(pre_model.objects.get(), pre_obj)
+        post_model = post_state.apps.get_model("tests", new_model_name)
+        self.assertEqual(post_model.objects.get().pk, pre_obj.pk)
+        pre_model.objects.all().delete()
+        post_obj = post_model.objects.create(foo=2)
+        self.assertEqual(post_model.objects.get(), post_obj)
+        self.assertEqual(pre_model.objects.get().pk, post_obj.pk)
+        pre_model.objects.update(foo=3)
+        self.assertEqual(post_model.objects.get().foo, 3)
+
+    def test_database_backwards(self):
+        (pre_state, model_name), (post_state, new_model_name) = self._apply_forwards()
+        with connection.schema_editor() as schema_editor:
+            AliasedRenameModel(model_name, new_model_name).database_backwards(
+                "tests", schema_editor, post_state, pre_state
+            )
+
+    def test_elidable(self):
+        model_name = "TestModel"
+        new_model_name = "NewTestModel"
+        operations = [
+            AliasedRenameModel(
+                model_name,
+                new_model_name,
+            ),
+            UnaliasModel(new_model_name, "tests_testmodel"),
+        ]
+        self.assert_optimizes_to(operations, [RenameModel(model_name, new_model_name)])
