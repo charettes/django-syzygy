@@ -26,6 +26,7 @@ class Command(makemigrations.Command):
         makemigrations.MigrationAutodetector = partial(
             MigrationAutodetector, style=self.style
         )
+        setattr(makemigrations.MigrationAutodetector, 'parse_number', MigrationAutodetector_.parse_number)
         try:
             super().handle(*args, **options)
         finally:
