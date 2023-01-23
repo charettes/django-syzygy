@@ -159,3 +159,20 @@ class MakeMigrationsTests(TestCase):
         self.assertIn("- Set database DEFAULT of field bar on foo", output)
         self.assertIn("null_field_removal/0003_remove_foo_bar.py", output)
         self.assertIn("- Remove field bar from foo", output)
+
+    @override_settings(
+        MIGRATION_MODULES={"tests": "tests.test_migrations.merge_conflict"}
+    )
+    def test_merge_conflict(self):
+        stdout = StringIO()
+        call_command(
+            "makemigrations",
+            "tests",
+            merge=True,
+            interactive=False,
+            no_color=True,
+            dry_run=True,
+            stdout=stdout,
+        )
+        self.assertIn("0002_first", stdout.getvalue())
+        self.assertIn("0002_second", stdout.getvalue())
