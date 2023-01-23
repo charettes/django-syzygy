@@ -328,8 +328,8 @@ class InteractiveAutodetectorTests(AutodetectorTestCase):
                 ],
             ),
         ]
-        questioner = InteractiveMigrationQuestioner()
         with captured_stdin() as stdin, captured_stdout() as stdout, captured_stderr() as stderr:
+            questioner = InteractiveMigrationQuestioner()
             stdin.write("y\n2\n")
             stdin.seek(0)
             self.get_changes(from_models, to_models, questioner)
@@ -369,8 +369,8 @@ class InteractiveAutodetectorTests(AutodetectorTestCase):
                 ],
             ),
         ]
-        questioner = InteractiveMigrationQuestioner()
         with captured_stdin() as stdin, captured_stdout() as stdout, captured_stderr() as stderr:
+            questioner = InteractiveMigrationQuestioner()
             stdin.write("y\n2\n")
             stdin.seek(0)
             self.get_changes(from_models, to_models, questioner)

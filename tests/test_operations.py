@@ -9,7 +9,6 @@ from django.db.models.fields import NOT_PROVIDED
 from django.test import TestCase
 
 from syzygy.autodetector import MigrationAutodetector
-from syzygy.compat import get_model_state_field
 from syzygy.constants import Stage
 from syzygy.operations import AddField, PostAddField, PreRemoveField
 from syzygy.plan import get_operation_stage
@@ -118,9 +117,7 @@ class PostAddFieldTests(OperationTestCase):
         if not preserve_default:
             self.assertIs(
                 NOT_PROVIDED,
-                get_model_state_field(
-                    to_state.models["tests", model_name.lower()], field_name
-                ).default,
+                to_state.models["tests", model_name.lower()].fields[field_name].default,
             )
         with connection.cursor() as cursor:
             fields = connection.introspection.get_table_description(
@@ -144,9 +141,9 @@ class PostAddFieldTests(OperationTestCase):
         if not preserve_default:
             self.assertIs(
                 NOT_PROVIDED,
-                get_model_state_field(
-                    from_state.models["tests", model_name.lower()], field_name
-                ).default,
+                from_state.models["tests", model_name.lower()]
+                .fields[field_name]
+                .default,
             )
         with connection.cursor() as cursor:
             fields = connection.introspection.get_table_description(

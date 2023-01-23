@@ -10,7 +10,6 @@ from django.db.migrations.questioner import InteractiveMigrationQuestioner
 from django.db.models.fields import NOT_PROVIDED
 from django.utils.functional import cached_property
 
-from .compat import get_model_state_field
 from .constants import Stage
 from .exceptions import AmbiguousStage
 from .operations import (
@@ -156,11 +155,10 @@ class MigrationAutodetector(_MigrationAutodetector):
                     operation = RenameModel.for_stage(operation, stage)
         elif isinstance(operation, operations.AlterField) and not operation.field.null:
             # Addition of not-NULL constraints must be performed post-deployment.
-            from_null = get_model_state_field(
-                self.from_state.models[app_label, operation.model_name_lower],
-                operation.name,
-            ).null
-            if from_null:
+            from_field = self.from_state.models[
+                app_label, operation.model_name_lower
+            ].fields[operation.name]
+            if from_field.null:
                 operation = AlterField.for_stage(operation, Stage.POST_DEPLOY)
         super().add_operation(app_label, operation, dependencies, beginning)
 
@@ -186,9 +184,7 @@ class MigrationAutodetector(_MigrationAutodetector):
         )
 
     def _generate_removed_field(self, app_label, model_name, field_name):
-        field = get_model_state_field(
-            self.from_state.models[app_label, model_name], field_name
-        )
+        field = self.from_state.models[app_label, model_name].fields[field_name]
         remove_default = field.default
         if remove_default is NOT_PROVIDED and field.null:
             return super()._generate_removed_field(app_label, model_name, field_name)

@@ -13,8 +13,11 @@ from syzygy.constants import Stage
 
 
 class BaseMigrateTests(TransactionTestCase):
-    def tearDown(self):
-        MigrationRecorder(connection).flush()
+    def setUp(self) -> None:
+        super().setUp()
+        recorder = MigrationRecorder(connection)
+        recorder.ensure_schema()
+        self.addCleanup(recorder.flush)
 
     def call_command(self, *args, **options):
         stdout = StringIO()
