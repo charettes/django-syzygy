@@ -17,6 +17,10 @@ Inspired by a `2015 post from Ludwig Hähne`_ and experience dealing with migrat
 .. _`2015 post from Ludwig Hähne`: https://pankrat.github.io/2015/django-migrations-without-downtimes/#django-wishlist
 .. _Zapier: https://zapier.com
 
+Currently only supports PostgreSQL and SQLite as they are the only two FOSS
+core backends that support transactional DDL and this tool is built around
+that expectation.
+
 Installation
 ------------
 
