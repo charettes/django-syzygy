@@ -193,7 +193,7 @@ def get_pre_deploy_plan(plan: Plan) -> Plan:
                 if inferred:
                     inferred_msg = " or ".join(map(str, inferred))
                     msg += (
-                        f" Definining an explicit `Migration.stage: syzygy: Stage` "
+                        f" Definining an explicit `Migration.stage: syzygy.Stage` "
                         f"for {inferred_msg} to bypass inferrence might help."
                     )
                 raise AmbiguousPlan(msg)
