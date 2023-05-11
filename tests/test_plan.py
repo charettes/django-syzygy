@@ -189,13 +189,11 @@ class MustPostDeployMigrationTests(SimpleTestCase):
 
 
 class GetPreDeployPlanTests(SimpleTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.pre_deploy = Migration(app_label="tests", name="0001")
-        cls.pre_deploy.stage = Stage.PRE_DEPLOY
-        cls.post_deploy = Migration(app_label="tests", name="0002")
-        cls.post_deploy.stage = Stage.POST_DEPLOY
+    def setUp(self):
+        self.pre_deploy = Migration(app_label="tests", name="0001")
+        self.pre_deploy.stage = Stage.PRE_DEPLOY
+        self.post_deploy = Migration(app_label="tests", name="0002")
+        self.post_deploy.stage = Stage.POST_DEPLOY
 
     def test_forward(self):
         plan = [(self.pre_deploy, False), (self.post_deploy, False)]
@@ -211,5 +209,36 @@ class GetPreDeployPlanTests(SimpleTestCase):
             (self.post_deploy, False),
             (self.pre_deploy, False),
         ]
-        with self.assertRaises(AmbiguousPlan):
+        msg = (
+            "Plan contains a non-contiguous sequence of pre-deployment migrations. "
+            "Migration tests.0001 is defined to be applied pre-deployment but it "
+            "depends on tests.0002 which is defined to be applied post-deployment."
+        )
+        with self.assertRaisesMessage(AmbiguousPlan, msg):
+            get_pre_deploy_plan(plan)
+        del self.pre_deploy.stage
+        self.pre_deploy.operations = [
+            CreateModel("model", []),
+        ]
+        msg = (
+            "Plan contains a non-contiguous sequence of pre-deployment migrations. "
+            "Migration tests.0001 is inferred to be applied pre-deployment but it "
+            "depends on tests.0002 which is defined to be applied post-deployment. "
+            "Definining an explicit `Migration.stage: syzygy: Stage` for tests.0001 "
+            "to bypass inferrence might help."
+        )
+        with self.assertRaisesMessage(AmbiguousPlan, msg):
+            get_pre_deploy_plan(plan)
+        del self.post_deploy.stage
+        self.post_deploy.operations = [
+            DeleteModel("model"),
+        ]
+        msg = (
+            "Plan contains a non-contiguous sequence of pre-deployment migrations. "
+            "Migration tests.0001 is inferred to be applied pre-deployment but it "
+            "depends on tests.0002 which is inferred to be applied post-deployment. "
+            "Definining an explicit `Migration.stage: syzygy: Stage` for tests.0001 "
+            "or tests.0002 to bypass inferrence might help."
+        )
+        with self.assertRaisesMessage(AmbiguousPlan, msg):
             get_pre_deploy_plan(plan)

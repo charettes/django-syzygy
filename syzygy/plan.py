@@ -88,6 +88,14 @@ def _get_migration_stage_fallback(migration: Migration) -> Optional[Stage]:
     )
 
 
+def _get_defined_stage(migration: Migration) -> Optional[Stage]:
+    """
+    Return the explicitly defined `Stage` of a migration or
+    `None` if not defined.
+    """
+    return getattr(migration, "stage", None) or _get_migration_stage_override(migration)
+
+
 def get_migration_stage(migration: Migration) -> Optional[Stage]:
     """
     Return the `Stage` of the migration.
@@ -101,9 +109,7 @@ def get_migration_stage(migration: Migration) -> Optional[Stage]:
     and a :class:`syzygy.exceptions.AmbiguousStage` exception will be raised
     if it contains operations of mixed stages.
     """
-    stage = getattr(migration, "stage", None) or _get_migration_stage_override(
-        migration
-    )
+    stage = _get_defined_stage(migration)
     if stage is not None:
         return stage
     for operation in migration.operations:
@@ -151,15 +157,37 @@ def get_pre_deploy_plan(plan: Plan) -> Plan:
     exception is raised.
     """
     pre_deploy_plan: Plan = []
-    post_deploy = False
+    post_deploy = None
     for migration, backward in plan:
         if must_post_deploy_migration(migration, backward):
-            post_deploy = True
+            post_deploy = migration
         else:
             if post_deploy:
-                raise AmbiguousPlan(
-                    "Plan contains a non-contiguous sequence of pre-deployment "
-                    "migrations."
+                inferred = []
+                stage_defined = _get_defined_stage(migration) is not None
+                post_stage_defined = _get_defined_stage(post_deploy) is not None
+                if stage_defined:
+                    stage_origin = "defined"
+                else:
+                    stage_origin = "inferred"
+                    inferred.append(migration)
+                if post_stage_defined:
+                    post_stage_origin = "defined"
+                else:
+                    post_stage_origin = "inferred"
+                    inferred.append(post_deploy)
+                msg = (
+                    f"Plan contains a non-contiguous sequence of pre-deployment "
+                    f"migrations. Migration {migration} is {stage_origin} to be applied "
+                    f"pre-deployment but it depends on {post_deploy} which is "
+                    f"{post_stage_origin} to be applied post-deployment."
                 )
+                if inferred:
+                    inferred_msg = " or ".join(map(str, inferred))
+                    msg += (
+                        f" Definining an explicit `Migration.stage: syzygy: Stage` "
+                        f"for {inferred_msg} to bypass inferrence might help."
+                    )
+                raise AmbiguousPlan(msg)
             pre_deploy_plan.append((migration, backward))
     return pre_deploy_plan
