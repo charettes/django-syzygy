@@ -157,15 +157,23 @@ def get_pre_deploy_plan(plan: Plan) -> Plan:
     exception is raised.
     """
     pre_deploy_plan: Plan = []
-    post_deploy = None
+    post_deploy_plan = {}
     for migration, backward in plan:
         if must_post_deploy_migration(migration, backward):
-            post_deploy = migration
+            post_deploy_plan[migration.app_label, migration.name] = migration
         else:
-            if post_deploy:
+            post_deploy_dep = post_deploy_plan and next(
+                (
+                    post_deploy_plan[dependency]
+                    for dependency in migration.dependencies
+                    if dependency in post_deploy_plan
+                ),
+                None,
+            )
+            if post_deploy_dep:
                 inferred = []
                 stage_defined = _get_defined_stage(migration) is not None
-                post_stage_defined = _get_defined_stage(post_deploy) is not None
+                post_stage_defined = _get_defined_stage(post_deploy_dep) is not None
                 if stage_defined:
                     stage_origin = "defined"
                 else:
@@ -175,11 +183,11 @@ def get_pre_deploy_plan(plan: Plan) -> Plan:
                     post_stage_origin = "defined"
                 else:
                     post_stage_origin = "inferred"
-                    inferred.append(post_deploy)
+                    inferred.append(post_deploy_dep)
                 msg = (
                     f"Plan contains a non-contiguous sequence of pre-deployment "
                     f"migrations. Migration {migration} is {stage_origin} to be applied "
-                    f"pre-deployment but it depends on {post_deploy} which is "
+                    f"pre-deployment but it depends on {post_deploy_dep} which is "
                     f"{post_stage_origin} to be applied post-deployment."
                 )
                 if inferred:

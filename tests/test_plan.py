@@ -193,6 +193,7 @@ class GetPreDeployPlanTests(SimpleTestCase):
         self.pre_deploy = Migration(app_label="tests", name="0001")
         self.pre_deploy.stage = Stage.PRE_DEPLOY
         self.post_deploy = Migration(app_label="tests", name="0002")
+        self.post_deploy.dependencies = [("tests", "0001")]
         self.post_deploy.stage = Stage.POST_DEPLOY
 
     def test_forward(self):
@@ -203,28 +204,51 @@ class GetPreDeployPlanTests(SimpleTestCase):
         plan = [(self.post_deploy, True), (self.pre_deploy, True)]
         self.assertEqual(get_pre_deploy_plan(plan), [(self.post_deploy, True)])
 
-    def test_non_contiguous(self):
+    def test_non_contiguous_free(self):
+        post_deploy_free = Migration(app_label="other", name="0001")
+        post_deploy_free.stage = Stage.POST_DEPLOY
+        plan = [
+            (post_deploy_free, False),
+            (self.pre_deploy, False),
+            (self.post_deploy, False),
+        ]
+        self.assertEqual(get_pre_deploy_plan(plan), [(self.pre_deploy, False)])
+
+    def test_non_contiguous_free_backward(self):
+        pre_deploy_free = Migration(app_label="other", name="0001")
+        pre_deploy_free.stage = Stage.PRE_DEPLOY
+        plan = [
+            (pre_deploy_free, True),
+            (self.post_deploy, True),
+            (self.pre_deploy, True),
+        ]
+        self.assertEqual(get_pre_deploy_plan(plan), [(self.post_deploy, True)])
+
+    def test_non_contiguous_deps(self):
+        pre_deploy_dep = Migration(app_label="other", name="0001")
+        pre_deploy_dep.stage = Stage.PRE_DEPLOY
+        pre_deploy_dep.dependencies = [("tests", "0002")]
         plan = [
             (self.pre_deploy, False),
             (self.post_deploy, False),
-            (self.pre_deploy, False),
+            (pre_deploy_dep, False),
         ]
         msg = (
             "Plan contains a non-contiguous sequence of pre-deployment migrations. "
-            "Migration tests.0001 is defined to be applied pre-deployment but it "
+            "Migration other.0001 is defined to be applied pre-deployment but it "
             "depends on tests.0002 which is defined to be applied post-deployment."
         )
         with self.assertRaisesMessage(AmbiguousPlan, msg):
             get_pre_deploy_plan(plan)
-        del self.pre_deploy.stage
-        self.pre_deploy.operations = [
+        del pre_deploy_dep.stage
+        pre_deploy_dep.operations = [
             CreateModel("model", []),
         ]
         msg = (
             "Plan contains a non-contiguous sequence of pre-deployment migrations. "
-            "Migration tests.0001 is inferred to be applied pre-deployment but it "
+            "Migration other.0001 is inferred to be applied pre-deployment but it "
             "depends on tests.0002 which is defined to be applied post-deployment. "
-            "Definining an explicit `Migration.stage: syzygy: Stage` for tests.0001 "
+            "Definining an explicit `Migration.stage: syzygy: Stage` for other.0001 "
             "to bypass inferrence might help."
         )
         with self.assertRaisesMessage(AmbiguousPlan, msg):
@@ -235,9 +259,9 @@ class GetPreDeployPlanTests(SimpleTestCase):
         ]
         msg = (
             "Plan contains a non-contiguous sequence of pre-deployment migrations. "
-            "Migration tests.0001 is inferred to be applied pre-deployment but it "
+            "Migration other.0001 is inferred to be applied pre-deployment but it "
             "depends on tests.0002 which is inferred to be applied post-deployment. "
-            "Definining an explicit `Migration.stage: syzygy: Stage` for tests.0001 "
+            "Definining an explicit `Migration.stage: syzygy: Stage` for other.0001 "
             "or tests.0002 to bypass inferrence might help."
         )
         with self.assertRaisesMessage(AmbiguousPlan, msg):
