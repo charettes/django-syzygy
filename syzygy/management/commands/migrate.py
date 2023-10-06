@@ -12,7 +12,12 @@ from django.db.migrations.executor import MigrationExecutor
 
 from syzygy.constants import Stage
 from syzygy.plan import Plan, get_pre_deploy_plan, hash_plan
-from syzygy.quorum import join_quorum, poll_quorum
+from syzygy.quorum import (
+    QuorumDisolved,
+    join_quorum,
+    poll_quorum,
+    sever_quorum,
+)
 
 
 class PreDeployMigrationExecutor(MigrationExecutor):
@@ -189,7 +194,15 @@ class Command(migrate.Command):
                 self.stdout.write(
                     "Reached pre-migrate quorum, proceeding with planned migrations..."
                 )
-            yield True
+            try:
+                yield True
+            except:  # noqa: E722
+                # Bare except clause to capture any form of termination.
+                self.stderr.write(
+                    "Encountered exception while applying migrations, disovling quorum."
+                )
+                sever_quorum(post_namespace, quorum)
+                raise
             if verbosity:
                 self.stdout.write("Waiting for post-migrate quorum...")
             duration = self._join_or_poll_until_quorum(
@@ -207,9 +220,14 @@ class Command(migrate.Command):
         if verbosity:
             self.stdout.write(f"Reached pre-migrate quorum after {duration:.2f}s...")
             self.stdout.write("Waiting for migrations to be applied by remote party...")
-        duration = self._join_or_poll_until_quorum(
-            post_namespace, quorum, quorum_timeout
-        )
+        try:
+            duration = self._join_or_poll_until_quorum(
+                post_namespace, quorum, quorum_timeout
+            )
+        except QuorumDisolved as exc:
+            raise CommandError(
+                "Error encountered by remote party while applying migration, aborting."
+            ) from exc
         if verbosity:
             self.stdout.write(f"Reached post-migrate quorum after {duration:.2f}s...")
             self.stdout.write("Migrations applied by remote party")

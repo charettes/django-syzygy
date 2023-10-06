@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 
 from django.core.cache import DEFAULT_CACHE_ALIAS, caches
 
+from ..exceptions import QuorumDisolved
 from .base import QuorumBase
 
 
@@ -30,7 +31,6 @@ class CacheQuorum(QuorumBase):
         )
 
     def join(self, namespace: str, quorum: int) -> bool:
-        """Join the `namespace` and return whether or not `quorum` was reached."""
         namespace_key, clear_namespace_key = self._get_namespace_keys(namespace)
         self.cache.add(namespace_key, 0, timeout=self.timeout, version=self.version)
         self.cache.add(
@@ -44,12 +44,20 @@ class CacheQuorum(QuorumBase):
             return True
         return False
 
+    def sever(self, namespace: str, quorum: int):
+        namespace_key, _ = self._get_namespace_keys(namespace)
+        self.cache.add(namespace_key, 0, timeout=self.timeout, version=self.version)
+        self.cache.decr(namespace_key, quorum, version=self.version)
+
     def poll(self, namespace: str, quorum: int) -> bool:
-        """Return whether or not `namespace`'s `quorum` was reached."""
         namespace_key, clear_namespace_key = self._get_namespace_keys(namespace)
         current = self.cache.get(namespace_key, version=self.version)
         if current == quorum:
             if self.cache.decr(clear_namespace_key, version=self.version) == 0:
                 self._clear(namespace)
             return True
+        elif current <= 0:
+            if self.cache.decr(clear_namespace_key, version=self.version) == 0:
+                self._clear(namespace)
+            raise QuorumDisolved
         return False

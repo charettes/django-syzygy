@@ -78,6 +78,21 @@ class MigrateQuorumTests(BaseMigrateTests):
         connections.close_all()
         return stdout
 
+    def _call_failing_command_thread(self, options):
+        stdout = StringIO()
+        stderr = StringIO()
+        with self.assertRaises(Exception) as exc:
+            call_command(
+                "migrate",
+                "tests",
+                no_color=True,
+                stdout=stdout,
+                stderr=stderr,
+                **options,
+            )
+        connections.close_all()
+        return exc.exception, stdout.getvalue(), stderr.getvalue()
+
     def call_command_with_quorum(self, stage, quorum=3):
         with mock.patch("time.sleep"), ThreadPool(processes=quorum) as pool:
             stdouts = pool.map_async(
@@ -126,6 +141,43 @@ class MigrateQuorumTests(BaseMigrateTests):
         msg = "Migration plan quorum timeout"
         with self.assertRaisesMessage(RuntimeError, msg):
             self.call_command(quorum=2, quorum_timeout=1)
+
+    @override_settings(MIGRATION_MODULES={"tests": "tests.test_migrations.crash"})
+    def test_quorum_severed(self):
+        quorum = 3
+        stage = Stage.PRE_DEPLOY
+        with mock.patch("time.sleep"), ThreadPool(processes=quorum) as pool:
+            results = pool.map_async(
+                self._call_failing_command_thread,
+                [{"stage": stage, "quorum": quorum}] * quorum,
+            ).get()
+        severed = 0
+        severer = 0
+        for exc, stdout, stderr in results:
+            if (
+                isinstance(exc, CommandError)
+                and str(exc)
+                == "Error encountered by remote party while applying migration, aborting."
+            ):
+                self.assertIn(
+                    "Waiting for migrations to be applied by remote party...", stdout
+                )
+                self.assertEqual(stderr, "")
+                severed += 1
+            elif str(exc) == "Test crash":
+                self.assertIn(
+                    "Reached pre-migrate quorum, proceeding with planned migrations...",
+                    stdout,
+                )
+                self.assertIn(
+                    "Encountered exception while applying migrations, disovling quorum",
+                    stderr,
+                )
+                severer += 1
+            else:
+                self.fail(f"Unexpected exception: {exc}")
+        self.assertEqual(severed, quorum - 1)
+        self.assertEqual(severer, 1)
 
 
 class MakeMigrationsTests(TestCase):

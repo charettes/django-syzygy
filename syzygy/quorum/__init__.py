@@ -5,14 +5,19 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.module_loading import import_string
 
+from .backends.base import QuorumBase
+from .exceptions import QuorumDisolved
+
+__all__ = ("join_quorum", "sever_quorum", "poll_quorum", "QuorumDisolved")
+
 
 @lru_cache(maxsize=1)
-def _get_quorum(backend_path, **backend_options):
+def _get_quorum(backend_path, **backend_options) -> QuorumBase:
     backend_cls = import_string(backend_path)
     return backend_cls(**backend_options)
 
 
-def _get_configured_quorum():
+def _get_configured_quorum() -> QuorumBase:
     try:
         config: Union[dict, str] = settings.MIGRATION_QUORUM_BACKEND  # type: ignore
     except AttributeError:
@@ -48,6 +53,10 @@ def _get_configured_quorum():
 
 def join_quorum(namespace: str, quorum: int) -> bool:
     return _get_configured_quorum().join(namespace=namespace, quorum=quorum)
+
+
+def sever_quorum(namespace: str, quorum: int) -> bool:
+    return _get_configured_quorum().sever(namespace=namespace, quorum=quorum)
 
 
 def poll_quorum(namespace: str, quorum: int) -> bool:
