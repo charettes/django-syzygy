@@ -163,9 +163,18 @@ class MigrationAutodetector(_MigrationAutodetector):
         super().add_operation(app_label, operation, dependencies, beginning)
 
     def _generate_added_field(self, app_label, model_name, field_name):
+        # Delegate most of the logic to super() ...
         super()._generate_added_field(app_label, model_name, field_name)
-        add_field = self.generated_operations[app_label][-1]
-        add_field.__class__ = AddField
+        # ... and immediately swap the added operation by an adjsuted one.
+        old_add_field = self.generated_operations[app_label][-1]
+        add_field = AddField(
+            old_add_field.model_name,
+            old_add_field.name,
+            old_add_field.field,
+            old_add_field.preserve_default,
+        )
+        add_field._auto_deps = old_add_field._auto_deps
+        self.generated_operations[app_label][-1] = add_field
         stage = OperationStage()
         self.add_operation(
             self.STAGE_SPLIT,
