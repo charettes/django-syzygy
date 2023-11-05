@@ -165,12 +165,15 @@ class MigrationAutodetector(_MigrationAutodetector):
     def _generate_added_field(self, app_label, model_name, field_name):
         # Delegate most of the logic to super() ...
         super()._generate_added_field(app_label, model_name, field_name)
-        # ... and immediately swap the added operation by an adjsuted one.
         old_add_field = self.generated_operations[app_label][-1]
+        field = old_add_field.field
+        if field.null and not field.has_default():
+            return
+        # ... and immediately swap the added operation by an adjsuted one.
         add_field = AddField(
             old_add_field.model_name,
             old_add_field.name,
-            old_add_field.field,
+            field,
             old_add_field.preserve_default,
         )
         add_field._auto_deps = old_add_field._auto_deps

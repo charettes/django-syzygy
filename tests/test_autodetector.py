@@ -51,7 +51,7 @@ class AutodetectorTestCase(TestCase):
 
 
 class AutodetectorTests(AutodetectorTestCase):
-    def test_field_addition(self):
+    def _test_field_addition(self, field):
         from_model = ModelState("tests", "Model", [])
         to_model = ModelState(
             "tests", "Model", [("field", models.IntegerField(default=42))]
@@ -66,6 +66,29 @@ class AutodetectorTests(AutodetectorTestCase):
         self.assertEqual(changes[1].dependencies, [("tests", "auto_1")])
         self.assertEqual(len(changes[1].operations), 1)
         self.assertIsInstance(changes[1].operations[0], PostAddField)
+
+    def test_field_addition(self):
+        fields = [
+            models.IntegerField(),
+            models.IntegerField(default=42),
+            models.IntegerField(null=True, default=42),
+        ]
+        for field in fields:
+            with self.subTest(field=field):
+                self._test_field_addition(field)
+
+    def test_nullable_field_addition(self):
+        """
+        No action required if the field is already NULL'able and doesn't have
+        a `default`.
+        """
+        from_model = ModelState("tests", "Model", [])
+        to_model = ModelState(
+            "tests", "Model", [("field", models.IntegerField(null=True))]
+        )
+        changes = self.get_changes([from_model], [to_model])["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
 
     def _test_field_removal(self, field):
         from_model = ModelState("tests", "Model", [("field", field)])
