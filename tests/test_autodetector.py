@@ -1,5 +1,5 @@
 from typing import List, Optional
-from unittest import mock
+from unittest import mock, skipUnless
 
 from django.core.management.color import color_style
 from django.db import migrations, models
@@ -12,10 +12,12 @@ from django.test import TestCase
 from django.test.utils import captured_stderr, captured_stdin, captured_stdout
 
 from syzygy.autodetector import MigrationAutodetector
+from syzygy.compat import field_db_default_supported
 from syzygy.constants import Stage
 from syzygy.exceptions import AmbiguousStage
 from syzygy.operations import (
     AddField,
+    AlterField,
     PostAddField,
     PreRemoveField,
     RenameField,
@@ -53,23 +55,30 @@ class AutodetectorTestCase(TestCase):
 class AutodetectorTests(AutodetectorTestCase):
     def _test_field_addition(self, field):
         from_model = ModelState("tests", "Model", [])
-        to_model = ModelState(
-            "tests", "Model", [("field", models.IntegerField(default=42))]
-        )
+        to_model = ModelState("tests", "Model", [("field", field)])
         changes = self.get_changes([from_model], [to_model])["tests"]
         self.assertEqual(len(changes), 2)
         self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
         self.assertEqual(changes[0].dependencies, [])
         self.assertEqual(len(changes[0].operations), 1)
-        self.assertIsInstance(changes[0].operations[0], AddField)
+        pre_operation = changes[0].operations[0]
+        if field_db_default_supported:
+            self.assertIsInstance(pre_operation, migrations.AddField)
+            self.assertEqual(pre_operation.field.db_default, field.default)
+        else:
+            self.assertIsInstance(pre_operation, AddField)
         self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
         self.assertEqual(changes[1].dependencies, [("tests", "auto_1")])
         self.assertEqual(len(changes[1].operations), 1)
-        self.assertIsInstance(changes[1].operations[0], PostAddField)
+        post_operation = changes[1].operations[0]
+        if field_db_default_supported:
+            self.assertIsInstance(post_operation, AlterField)
+            self.assertIs(post_operation.field.db_default, models.NOT_PROVIDED)
+        else:
+            self.assertIsInstance(post_operation, PostAddField)
 
     def test_field_addition(self):
         fields = [
-            models.IntegerField(),
             models.IntegerField(default=42),
             models.IntegerField(null=True, default=42),
         ]
@@ -90,6 +99,19 @@ class AutodetectorTests(AutodetectorTestCase):
         self.assertEqual(len(changes), 1)
         self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
 
+    @skipUnless(field_db_default_supported, "Field.db_default is not supported")
+    def test_db_default_field_addition(self):
+        """
+        No action required if the field already has a `db_default`
+        """
+        from_model = ModelState("tests", "Model", [])
+        to_model = ModelState(
+            "tests", "Model", [("field", models.IntegerField(db_default=42))]
+        )
+        changes = self.get_changes([from_model], [to_model])["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+
     def _test_field_removal(self, field):
         from_model = ModelState("tests", "Model", [("field", field)])
         to_model = ModelState("tests", "Model", [])
@@ -99,7 +121,14 @@ class AutodetectorTests(AutodetectorTestCase):
         self.assertEqual(changes[0].dependencies, [])
         self.assertEqual(len(changes[0].operations), 1)
         pre_operation = changes[0].operations[0]
-        self.assertIsInstance(pre_operation, PreRemoveField)
+        if field_db_default_supported:
+            self.assertIsInstance(pre_operation, migrations.AlterField)
+            if field.has_default():
+                self.assertEqual(pre_operation.field.db_default, 42)
+            else:
+                self.assertIs(pre_operation.field.null, True)
+        else:
+            self.assertIsInstance(pre_operation, PreRemoveField)
         if not field.has_default():
             self.assertIs(pre_operation.field.null, True)
         self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
@@ -124,6 +153,19 @@ class AutodetectorTests(AutodetectorTestCase):
         """
         from_model = ModelState(
             "tests", "Model", [("field", models.IntegerField(null=True))]
+        )
+        to_model = ModelState("tests", "Model", [])
+        changes = self.get_changes([from_model], [to_model])["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
+
+    @skipUnless(field_db_default_supported, "Field.db_default is not supported")
+    def test_db_default_field_removal(self):
+        """
+        No action required if the field already has a `db_default`
+        """
+        from_model = ModelState(
+            "tests", "Model", [("field", models.IntegerField(db_default=42))]
         )
         to_model = ModelState("tests", "Model", [])
         changes = self.get_changes([from_model], [to_model])["tests"]
@@ -293,7 +335,10 @@ class AutodetectorStageTests(AutodetectorTestCase):
         self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
         self.assertEqual(changes[1].dependencies, [("tests", "auto_1")])
         self.assertEqual(len(changes[1].operations), 2)
-        self.assertIsInstance(changes[1].operations[0], PostAddField)
+        if field_db_default_supported:
+            self.assertIsInstance(changes[1].operations[0], AlterField)
+        else:
+            self.assertIsInstance(changes[1].operations[0], PostAddField)
         self.assertIsInstance(changes[1].operations[1], migrations.DeleteModel)
 
     def test_mixed_stage_failure(self):

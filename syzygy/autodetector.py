@@ -13,12 +13,12 @@ from django.utils.functional import cached_property
 from .constants import Stage
 from .exceptions import AmbiguousStage
 from .operations import (
-    AddField,
     AlterField,
-    PostAddField,
-    PreRemoveField,
     RenameField,
     RenameModel,
+    get_post_add_field_operation,
+    get_pre_add_field_operation,
+    get_pre_remove_field_operation,
 )
 from .plan import partition_operations
 
@@ -167,14 +167,16 @@ class MigrationAutodetector(_MigrationAutodetector):
         super()._generate_added_field(app_label, model_name, field_name)
         old_add_field = self.generated_operations[app_label][-1]
         field = old_add_field.field
-        if field.null and not field.has_default():
+        if (field.null and not field.has_default()) or getattr(
+            field, "db_default", NOT_PROVIDED
+        ) is not NOT_PROVIDED:
             return
-        # ... and immediately swap the added operation by an adjsuted one.
-        add_field = AddField(
+        # ... otherwise swap the added operation by an adjusted one.
+        add_field = get_pre_add_field_operation(
             old_add_field.model_name,
             old_add_field.name,
-            field,
-            old_add_field.preserve_default,
+            old_add_field.field,
+            preserve_default=old_add_field.preserve_default,
         )
         add_field._auto_deps = old_add_field._auto_deps
         self.generated_operations[app_label][-1] = add_field
@@ -184,8 +186,11 @@ class MigrationAutodetector(_MigrationAutodetector):
             stage,
             dependencies=[(app_label, self.STAGE_SPLIT, add_field)],
         )
-        post_add_field = PostAddField(
-            model_name=model_name, name=field_name, field=add_field.field
+        post_add_field = get_post_add_field_operation(
+            model_name=model_name,
+            name=field_name,
+            field=field,
+            preserve_default=add_field.preserve_default,
         )
         super().add_operation(
             app_label,
@@ -198,7 +203,9 @@ class MigrationAutodetector(_MigrationAutodetector):
     def _generate_removed_field(self, app_label, model_name, field_name):
         field = self.from_state.models[app_label, model_name].fields[field_name]
         remove_default = field.default
-        if remove_default is NOT_PROVIDED and field.null:
+        if (remove_default is NOT_PROVIDED and field.null) or getattr(
+            field, "db_default", NOT_PROVIDED
+        ) is not NOT_PROVIDED:
             return super()._generate_removed_field(app_label, model_name, field_name)
 
         if remove_default is NOT_PROVIDED:
@@ -232,7 +239,7 @@ class MigrationAutodetector(_MigrationAutodetector):
                     field.null = True
                 else:
                     field.default = remove_default
-        pre_remove_field = PreRemoveField(
+        pre_remove_field = get_pre_remove_field_operation(
             model_name=model_name, name=field_name, field=field
         )
         self.add_operation(app_label, pre_remove_field)

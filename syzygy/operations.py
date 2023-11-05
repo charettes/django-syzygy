@@ -2,7 +2,9 @@ from contextlib import contextmanager
 
 from django.db.migrations import operations
 from django.db.models.fields import NOT_PROVIDED
+from django.utils.functional import cached_property
 
+from .compat import field_db_default_supported
 from .constants import Stage
 
 
@@ -122,6 +124,39 @@ class PreRemoveField(operations.AlterField):
         return "Set field %s of %s NULLable" % (self.name, self.model_name)
 
 
+if field_db_default_supported:
+    # XXX: This allows for a more descriptive migration_name_fragment
+    # to be associated with instances of AlterField.
+    operations.AlterField.migration_name_fragment = cached_property(
+        operations.AlterField.migration_name_fragment.fget
+    )
+    operations.AlterField.migration_name_fragment.name = "migration_name_fragment"
+
+    def get_pre_remove_field_operation(model_name, name, field, **kwargs):
+        if field.db_default is not NOT_PROVIDED:
+            raise ValueError(
+                "Fields with a db_default don't require a pre-deployment operation."
+            )
+        field = field.clone()
+        if field.has_default():
+            field.db_default = field.get_default()
+            fragment = f"set_db_default_{model_name.lower()}_{name}"
+            description = f"Set database DEFAULT of field {name} on {model_name}"
+        else:
+            field.null = True
+            fragment = f"set_nullable_{model_name.lower()}_{name}"
+            description = f"Set field {name} of {model_name} NULLable"
+        operation = operations.AlterField(model_name, name, field, **kwargs)
+        operation.migration_name_fragment = fragment
+        operation.describe = lambda: description
+        return operation
+
+    # XXX: Shim kept for historical migrations generated before Django 5.
+    PreRemoveField = get_pre_remove_field_operation  # noqa: F811
+else:
+    get_pre_remove_field_operation = PreRemoveField
+
+
 class AddField(operations.AddField):
     """
     Subclass of `AddField` that preserves the database default on database
@@ -165,6 +200,24 @@ class AddField(operations.AddField):
             return super().database_forwards(
                 app_label, schema_editor, from_state, to_state
             )
+
+
+if field_db_default_supported:
+
+    def get_pre_add_field_operation(model_name, name, field, preserve_default=True):
+        if field.db_default is not NOT_PROVIDED:
+            raise ValueError(
+                "Fields with a db_default don't require a pre-deployment operation."
+            )
+        field = field.clone()
+        field.db_default = field.get_default()
+        operation = operations.AddField(model_name, name, field, preserve_default)
+        return operation
+
+    # XXX: Shim kept for historical migrations generated before Django 5.
+    AddField = get_pre_add_field_operation  # noqa: F811
+else:
+    get_pre_add_field_operation = AddField
 
 
 class PostAddField(operations.AlterField):
@@ -216,6 +269,37 @@ class PostAddField(operations.AlterField):
             self.name,
             self.model_name,
         )
+
+
+if field_db_default_supported:
+
+    def get_post_add_field_operation(model_name, name, field, preserve_default=True):
+        if field.db_default is not NOT_PROVIDED:
+            raise ValueError(
+                "Fields with a db_default don't require a post-deployment operation."
+            )
+        field = field.clone()
+        field.db_default = NOT_PROVIDED
+        if not preserve_default:
+            field.default = NOT_PROVIDED
+        operation = AlterField(
+            model_name,
+            name,
+            field,
+            stage=Stage.POST_DEPLOY,
+        )
+        operation.migration_name_fragment = (
+            f"drop_db_default_{model_name.lower()}_{name}"
+        )
+        operation.describe = (
+            lambda: f"Drop database DEFAULT of field {name} on {model_name}"
+        )
+        return operation
+
+    # XXX: Shim kept for historical migrations generated before Django 5.
+    PostAddField = get_post_add_field_operation  # noqa: F811
+else:
+    get_post_add_field_operation = PostAddField
 
 
 class StagedOperation(operations.base.Operation):

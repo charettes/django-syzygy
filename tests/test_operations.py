@@ -1,4 +1,5 @@
 from typing import List, Optional, Tuple
+from unittest import mock, skipUnless
 
 from django.db import connection, migrations, models
 from django.db.migrations.operations.base import Operation
@@ -9,8 +10,13 @@ from django.db.models.fields import NOT_PROVIDED
 from django.test import TestCase
 
 from syzygy.autodetector import MigrationAutodetector
+from syzygy.compat import field_db_default_supported
 from syzygy.constants import Stage
-from syzygy.operations import AddField, PostAddField, PreRemoveField
+from syzygy.operations import (
+    get_post_add_field_operation,
+    get_pre_add_field_operation,
+    get_pre_remove_field_operation,
+)
 from syzygy.plan import get_operation_stage
 
 
@@ -57,7 +63,7 @@ class OperationTestCase(TestCase):
         self.assertEqual(deep_deconstruct(optimized), deep_deconstruct(expected))
 
 
-class AddFieldTests(OperationTestCase):
+class PreAddFieldTests(OperationTestCase):
     def test_database_forwards(self, preserve_default=True):
         model_name = "TestModel"
         field_name = "foo"
@@ -67,7 +73,9 @@ class AddFieldTests(OperationTestCase):
         )
         pre_model = state.apps.get_model("tests", model_name)
         state = self.apply_operation(
-            AddField(model_name, field_name, field, preserve_default=preserve_default),
+            get_pre_add_field_operation(
+                model_name, field_name, field, preserve_default=preserve_default
+            ),
             state,
         )
         post_model = state.apps.get_model("tests", model_name)
@@ -81,19 +89,39 @@ class AddFieldTests(OperationTestCase):
         model_name = "TestModel"
         field_name = "foo"
         field = models.IntegerField(default=42)
-        operation = AddField(model_name, field_name, field)
-        self.assertEqual(
-            operation.deconstruct(),
-            (
-                "AddField",
-                [],
-                {"model_name": model_name, "name": field_name, "field": field},
-            ),
-        )
-        serializer = OperationSerializer(operation)
-        serialized, imports = serializer.serialize()
-        self.assertTrue(serialized.startswith("syzygy.operations.AddField"))
-        self.assertIn("import syzygy.operations", imports)
+        operation = get_pre_add_field_operation(model_name, field_name, field)
+        deconstructed = operation.deconstruct()
+        if field_db_default_supported:
+            self.assertEqual(
+                operation.deconstruct(),
+                (
+                    "AddField",
+                    [],
+                    {"model_name": model_name, "name": field_name, "field": mock.ANY},
+                ),
+            )
+            self.assertEqual(
+                deconstructed[2]["field"].deconstruct(),
+                (
+                    None,
+                    "django.db.models.IntegerField",
+                    [],
+                    {"default": 42, "db_default": 42},
+                ),
+            )
+        else:
+            self.assertEqual(
+                deconstructed,
+                (
+                    "AddField",
+                    [],
+                    {"model_name": model_name, "name": field_name, "field": field},
+                ),
+            )
+            serializer = OperationSerializer(operation)
+            serialized, imports = serializer.serialize()
+            self.assertTrue(serialized.startswith("syzygy.operations.AddField"))
+            self.assertIn("import syzygy.operations", imports)
 
 
 class PostAddFieldTests(OperationTestCase):
@@ -106,13 +134,16 @@ class PostAddFieldTests(OperationTestCase):
         from_state = self.apply_operations(
             [
                 migrations.CreateModel(model_name, [("id", models.AutoField())]),
-                AddField(
+                get_pre_add_field_operation(
                     model_name, field_name, field, preserve_default=preserve_default
                 ),
             ]
         )
         to_state = self.apply_operation(
-            PostAddField(model_name, field_name, field), from_state.clone()
+            get_post_add_field_operation(
+                model_name, field_name, field, preserve_default=preserve_default
+            ),
+            from_state.clone(),
         )
         if not preserve_default:
             self.assertIs(
@@ -135,9 +166,9 @@ class PostAddFieldTests(OperationTestCase):
         field_name = "foo"
         field = models.IntegerField(default=42)
         with connection.schema_editor() as schema_editor:
-            PostAddField(model_name, field_name, field).database_backwards(
-                "tests", schema_editor, to_state, from_state
-            )
+            get_post_add_field_operation(
+                model_name, field_name, field
+            ).database_backwards("tests", schema_editor, to_state, from_state)
         if not preserve_default:
             self.assertIs(
                 NOT_PROVIDED,
@@ -149,7 +180,12 @@ class PostAddFieldTests(OperationTestCase):
             fields = connection.introspection.get_table_description(
                 cursor, "tests_testmodel"
             )
-        self.assertEqual(int(fields[-1].default), 42)
+        for field in fields:
+            if field.name == "foo":
+                break
+        else:
+            self.fail('Could not find field "foo"')
+        self.assertEqual(int(field.default), 42)
 
     def test_database_backwards_discard_default(self):
         self.test_database_backwards(preserve_default=False)
@@ -159,13 +195,15 @@ class PostAddFieldTests(OperationTestCase):
         field_name = "foo"
         field = models.IntegerField(default=42)
         self.assertEqual(
-            get_operation_stage(PostAddField(model_name, field_name, field)),
+            get_operation_stage(
+                get_post_add_field_operation(model_name, field_name, field)
+            ),
             Stage.POST_DEPLOY,
         )
 
     def test_migration_name_fragment(self):
         self.assertEqual(
-            PostAddField(
+            get_post_add_field_operation(
                 "TestModel", "foo", models.IntegerField(default=42)
             ).migration_name_fragment,
             "drop_db_default_testmodel_foo",
@@ -173,7 +211,7 @@ class PostAddFieldTests(OperationTestCase):
 
     def test_describe(self):
         self.assertEqual(
-            PostAddField(
+            get_post_add_field_operation(
                 "TestModel", "foo", models.IntegerField(default=42)
             ).describe(),
             "Drop database DEFAULT of field foo on TestModel",
@@ -183,27 +221,52 @@ class PostAddFieldTests(OperationTestCase):
         model_name = "TestModel"
         field_name = "foo"
         field = models.IntegerField(default=42)
-        operation = PostAddField(model_name, field_name, field)
-        self.assertEqual(
-            operation.deconstruct(),
-            (
-                "PostAddField",
-                [],
-                {"model_name": model_name, "name": field_name, "field": field},
-            ),
-        )
-        serializer = OperationSerializer(operation)
-        serialized, imports = serializer.serialize()
-        self.assertTrue(serialized.startswith("syzygy.operations.PostAddField"))
-        self.assertIn("import syzygy.operations", imports)
+        operation = get_post_add_field_operation(model_name, field_name, field)
+        deconstructed = operation.deconstruct()
+        if field_db_default_supported:
+            self.assertEqual(
+                deconstructed,
+                (
+                    "AlterField",
+                    [],
+                    {
+                        "model_name": model_name,
+                        "name": field_name,
+                        "field": mock.ANY,
+                        "stage": Stage.POST_DEPLOY,
+                    },
+                ),
+            )
+            self.assertEqual(
+                deconstructed[2]["field"].deconstruct(),
+                (
+                    None,
+                    "django.db.models.IntegerField",
+                    [],
+                    {"default": 42},
+                ),
+            )
+        else:
+            self.assertEqual(
+                deconstructed,
+                (
+                    "PostAddField",
+                    [],
+                    {"model_name": model_name, "name": field_name, "field": field},
+                ),
+            )
+            serializer = OperationSerializer(operation)
+            serialized, imports = serializer.serialize()
+            self.assertTrue(serialized.startswith("syzygy.operations.PostAddField"))
+            self.assertIn("import syzygy.operations", imports)
 
     def test_reduce(self):
         model_name = "TestModel"
         field_name = "foo"
         field = models.IntegerField(default=42)
         operations = [
-            AddField(model_name, field_name, field),
-            PostAddField(model_name, field_name, field),
+            get_pre_add_field_operation(model_name, field_name, field),
+            get_post_add_field_operation(model_name, field_name, field),
         ]
         self.assert_optimizes_to(
             operations,
@@ -219,7 +282,7 @@ class PreRemoveFieldTests(OperationTestCase):
         field = models.IntegerField()
         operations = [
             migrations.CreateModel(model_name, [("foo", field)]),
-            PreRemoveField(
+            get_pre_remove_field_operation(
                 model_name,
                 "foo",
                 field,
@@ -238,7 +301,7 @@ class PreRemoveFieldTests(OperationTestCase):
         field = models.IntegerField(default=42)
         operations = [
             migrations.CreateModel(model_name, [("foo", field)]),
-            PreRemoveField(
+            get_pre_remove_field_operation(
                 model_name,
                 "foo",
                 field,
@@ -254,13 +317,13 @@ class PreRemoveFieldTests(OperationTestCase):
 
     def test_migration_name_fragment(self):
         self.assertEqual(
-            PreRemoveField(
+            get_pre_remove_field_operation(
                 "TestModel", "foo", models.IntegerField(default=42)
             ).migration_name_fragment,
             "set_db_default_testmodel_foo",
         )
         self.assertEqual(
-            PreRemoveField(
+            get_pre_remove_field_operation(
                 "TestModel", "foo", models.IntegerField()
             ).migration_name_fragment,
             "set_nullable_testmodel_foo",
@@ -268,13 +331,15 @@ class PreRemoveFieldTests(OperationTestCase):
 
     def test_describe(self):
         self.assertEqual(
-            PreRemoveField(
+            get_pre_remove_field_operation(
                 "TestModel", "foo", models.IntegerField(default=42)
             ).describe(),
             "Set database DEFAULT of field foo on TestModel",
         )
         self.assertEqual(
-            PreRemoveField("TestModel", "foo", models.IntegerField()).describe(),
+            get_pre_remove_field_operation(
+                "TestModel", "foo", models.IntegerField()
+            ).describe(),
             "Set field foo of TestModel NULLable",
         )
 
@@ -282,30 +347,50 @@ class PreRemoveFieldTests(OperationTestCase):
         model_name = "TestModel"
         field_name = "foo"
         field = models.IntegerField(default=42)
-        operation = PreRemoveField(
+        operation = get_pre_remove_field_operation(
             model_name,
             field_name,
             field,
         )
-        self.assertEqual(
-            operation.deconstruct(),
-            (
-                "PreRemoveField",
-                [],
-                {"model_name": model_name, "name": field_name, "field": field},
-            ),
-        )
-        serializer = OperationSerializer(operation)
-        serialized, imports = serializer.serialize()
-        self.assertTrue(serialized.startswith("syzygy.operations.PreRemoveField"))
-        self.assertIn("import syzygy.operations", imports)
+        deconstructed = operation.deconstruct()
+        if field_db_default_supported:
+            self.assertEqual(
+                deconstructed,
+                (
+                    "AlterField",
+                    [],
+                    {"model_name": model_name, "name": field_name, "field": mock.ANY},
+                ),
+            )
+            self.assertEqual(
+                deconstructed[2]["field"].deconstruct(),
+                (
+                    None,
+                    "django.db.models.IntegerField",
+                    [],
+                    {"default": 42, "db_default": 42},
+                ),
+            )
+        else:
+            self.assertEqual(
+                deconstructed,
+                (
+                    "PreRemoveField",
+                    [],
+                    {"model_name": model_name, "name": field_name, "field": field},
+                ),
+            )
+            serializer = OperationSerializer(operation)
+            serialized, imports = serializer.serialize()
+            self.assertTrue(serialized.startswith("syzygy.operations.PreRemoveField"))
+            self.assertIn("import syzygy.operations", imports)
 
     def test_elidable(self):
         model_name = "TestModel"
         field_name = "foo"
         field = models.IntegerField(default=42)
         operations = [
-            PreRemoveField(
+            get_pre_remove_field_operation(
                 model_name,
                 field_name,
                 field,
@@ -313,3 +398,13 @@ class PreRemoveFieldTests(OperationTestCase):
             migrations.RemoveField(model_name, field_name, field),
         ]
         self.assert_optimizes_to(operations, [operations[-1]])
+
+    @skipUnless(field_db_default_supported, "Field.db_default not supported")
+    def test_defined_db_default(self):
+        with self.assertRaisesMessage(
+            ValueError,
+            "Fields with a db_default don't require a pre-deployment operation.",
+        ):
+            get_pre_remove_field_operation(
+                "model", "field", models.IntegerField(db_default=42)
+            )
