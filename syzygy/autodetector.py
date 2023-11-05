@@ -221,14 +221,17 @@ class MigrationAutodetector(_MigrationAutodetector):
                 if choice == 1:
                     remove_default = self.questioner._ask_default()
                 elif choice == 2:
-                    pass
+                    remove_default = None
                 else:
                     sys.exit(3)
             else:
                 remove_default = self.questioner.defaults.get("ask_remove_default")
             if remove_default is not NOT_PROVIDED:
                 field = field.clone()
-                field.default = remove_default
+                if remove_default is None:
+                    field.null = True
+                else:
+                    field.default = remove_default
         pre_remove_field = PreRemoveField(
             model_name=model_name, name=field_name, field=field
         )

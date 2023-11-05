@@ -2,7 +2,6 @@ from io import StringIO
 from multiprocessing.pool import ThreadPool
 from unittest import mock
 
-import django
 from django.core.cache import cache
 from django.core.management import CommandError, call_command
 from django.db import connection, connections
@@ -204,11 +203,8 @@ class MakeMigrationsTests(TestCase):
             "makemigrations", "tests", no_color=True, dry_run=True, stdout=stdout
         )
         output = stdout.getvalue()
-        if django.VERSION >= (3, 2):
-            self.assertIn("null_field_removal/0002_set_db_default_foo_bar.py", output)
-        else:
-            self.assertIn("null_field_removal/0002_auto", output)
-        self.assertIn("- Set database DEFAULT of field bar on foo", output)
+        self.assertIn("null_field_removal/0002_set_nullable_foo_bar.py", output)
+        self.assertIn("- Set field bar of foo NULLable", output)
         self.assertIn("null_field_removal/0003_remove_foo_bar.py", output)
         self.assertIn("- Remove field bar from foo", output)
 

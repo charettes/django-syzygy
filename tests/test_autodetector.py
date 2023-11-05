@@ -98,7 +98,10 @@ class AutodetectorTests(AutodetectorTestCase):
         self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
         self.assertEqual(changes[0].dependencies, [])
         self.assertEqual(len(changes[0].operations), 1)
-        self.assertIsInstance(changes[0].operations[0], PreRemoveField)
+        pre_operation = changes[0].operations[0]
+        self.assertIsInstance(pre_operation, PreRemoveField)
+        if not field.has_default():
+            self.assertIs(pre_operation.field.null, True)
         self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
         self.assertEqual(changes[1].dependencies, [("tests", "auto_1")])
         self.assertEqual(len(changes[1].operations), 1)
