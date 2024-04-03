@@ -204,9 +204,9 @@ class MakeMigrationsTests(TestCase):
         )
         output = stdout.getvalue()
         self.assertIn("null_field_removal/0002_set_nullable_foo_bar.py", output)
-        self.assertIn("- Set field bar of foo NULLable", output)
+        self.assertIn("Set field bar of foo NULLable", output)
         self.assertIn("null_field_removal/0003_remove_foo_bar.py", output)
-        self.assertIn("- Remove field bar from foo", output)
+        self.assertIn("Remove field bar from foo", output)
 
     @override_settings(
         MIGRATION_MODULES={"tests": "tests.test_migrations.merge_conflict"}
