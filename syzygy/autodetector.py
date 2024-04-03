@@ -11,6 +11,7 @@ from django.db.migrations.questioner import InteractiveMigrationQuestioner
 from django.db.models.fields import NOT_PROVIDED
 from django.utils.functional import cached_property
 
+from .compat import OperationDependency
 from .constants import Stage
 from .exceptions import AmbiguousStage
 from .operations import (
@@ -271,8 +272,18 @@ class MigrationAutodetector(_MigrationAutodetector):
             app_label,
             operations.RemoveField(model_name=model_name, name=field_name),
             dependencies=[
-                (app_label, model_name, field_name, "order_wrt_unset"),
-                (app_label, model_name, field_name, "foo_together_change"),
+                OperationDependency(
+                    app_label,
+                    model_name,
+                    field_name,
+                    OperationDependency.Type.REMOVE_ORDER_WRT,
+                ),
+                OperationDependency(
+                    app_label,
+                    model_name,
+                    field_name,
+                    OperationDependency.Type.ALTER_FOO_TOGETHER,
+                ),
                 StageDependency(STAGE_SPLIT, stage),
             ],
         )
