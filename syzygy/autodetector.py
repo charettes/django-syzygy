@@ -167,9 +167,11 @@ class MigrationAutodetector(_MigrationAutodetector):
         super()._generate_added_field(app_label, model_name, field_name)
         old_add_field = self.generated_operations[app_label][-1]
         field = old_add_field.field
-        if (field.null and not field.has_default()) or getattr(
-            field, "db_default", NOT_PROVIDED
-        ) is not NOT_PROVIDED:
+        if (
+            field.many_to_many
+            or (field.null and not field.has_default())
+            or getattr(field, "db_default", NOT_PROVIDED) is not NOT_PROVIDED
+        ):
             return
         # ... otherwise swap the added operation by an adjusted one.
         add_field = get_pre_add_field_operation(
