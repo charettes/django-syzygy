@@ -1,5 +1,6 @@
 import itertools
 import sys
+from typing import NamedTuple
 
 from django.db.migrations import operations
 from django.db.migrations.autodetector import (
@@ -22,12 +23,25 @@ from .operations import (
 )
 from .plan import partition_operations
 
+STAGE_SPLIT = "__stage__"
+
 
 class OperationStage(Operation):
     """
     Fake operation that serves as a placeholder to break operations into
     multiple migrations.
     """
+
+
+class StageDependency(NamedTuple):
+    app_label: str
+    operation: OperationStage
+
+
+class StagedOperationDependency(NamedTuple):
+    app_label: str
+    model_name: str
+    operation: Operation
 
 
 class MigrationAutodetector(_MigrationAutodetector):
@@ -53,8 +67,6 @@ class MigrationAutodetector(_MigrationAutodetector):
     And automatically remove the __stage__ migrations since it's a not
     an existing application.
     """
-
-    STAGE_SPLIT = "__stage__"
 
     def __init__(self, *args, **kwargs):
         self.style = kwargs.pop("style", None)
@@ -184,9 +196,9 @@ class MigrationAutodetector(_MigrationAutodetector):
         self.generated_operations[app_label][-1] = add_field
         stage = OperationStage()
         self.add_operation(
-            self.STAGE_SPLIT,
+            STAGE_SPLIT,
             stage,
-            dependencies=[(app_label, self.STAGE_SPLIT, add_field)],
+            dependencies=[StagedOperationDependency(app_label, STAGE_SPLIT, add_field)],
         )
         post_add_field = get_post_add_field_operation(
             model_name=model_name,
@@ -198,7 +210,7 @@ class MigrationAutodetector(_MigrationAutodetector):
             app_label,
             post_add_field,
             dependencies=[
-                (self.STAGE_SPLIT, stage),
+                StageDependency(STAGE_SPLIT, stage),
             ],
         )
 
@@ -247,10 +259,12 @@ class MigrationAutodetector(_MigrationAutodetector):
         self.add_operation(app_label, pre_remove_field)
         stage = OperationStage()
         self.add_operation(
-            self.STAGE_SPLIT,
+            STAGE_SPLIT,
             stage,
             dependencies=[
-                (app_label, self.STAGE_SPLIT, self.generated_operations[app_label][-1])
+                StagedOperationDependency(
+                    app_label, STAGE_SPLIT, self.generated_operations[app_label][-1]
+                ),
             ],
         )
         self.add_operation(
@@ -259,24 +273,20 @@ class MigrationAutodetector(_MigrationAutodetector):
             dependencies=[
                 (app_label, model_name, field_name, "order_wrt_unset"),
                 (app_label, model_name, field_name, "foo_together_change"),
-                (self.STAGE_SPLIT, stage),
+                StageDependency(STAGE_SPLIT, stage),
             ],
         )
 
     def check_dependency(self, operation, dependency):
-        # Stage dependency on a previous operation.
-        if dependency[1] == self.STAGE_SPLIT:
-            return dependency[2] is operation
-        # Dependency on a stage.
-        if dependency[0] == self.STAGE_SPLIT:
-            return dependency[1] is operation
+        if isinstance(dependency, (StageDependency, StagedOperationDependency)):
+            return dependency.operation is operation
         return super().check_dependency(operation, dependency)
 
     def _build_migration_list(self, *args, **kwargs):
         # Ensure generated operations sequence for each apps are partitioned
         # by stage.
         for app_label, app_operations in list(self.generated_operations.items()):
-            if app_label == self.STAGE_SPLIT:
+            if app_label == STAGE_SPLIT:
                 continue
             try:
                 pre_operations, post_operations = partition_operations(
@@ -314,20 +324,26 @@ class MigrationAutodetector(_MigrationAutodetector):
             if pre_operations and post_operations:
                 stage = OperationStage()
                 self.add_operation(
-                    self.STAGE_SPLIT,
+                    STAGE_SPLIT,
                     stage,
-                    dependencies=[(app_label, self.STAGE_SPLIT, pre_operations[-1])],
+                    dependencies=[
+                        StagedOperationDependency(
+                            app_label, STAGE_SPLIT, pre_operations[-1]
+                        )
+                    ],
                 )
-                post_operations[0]._auto_deps.append((self.STAGE_SPLIT, stage))
+                post_operations[0]._auto_deps.append(
+                    StageDependency(STAGE_SPLIT, stage)
+                )
                 # Assign updated operations as they might have be re-ordered by
                 # `partition_operations`.
                 self.generated_operations[app_label] = pre_operations + post_operations
         super()._build_migration_list(*args, **kwargs)
         # Remove all dangling references to stage migrations.
-        if self.migrations.pop(self.STAGE_SPLIT, None):
+        if self.migrations.pop(STAGE_SPLIT, None):
             for migration in itertools.chain.from_iterable(self.migrations.values()):
                 migration.dependencies = [
                     dependency
                     for dependency in migration.dependencies
-                    if dependency[0] != self.STAGE_SPLIT
+                    if dependency[0] != STAGE_SPLIT
                 ]

@@ -11,7 +11,7 @@ from django.db.migrations.state import ModelState, ProjectState
 from django.test import TestCase
 from django.test.utils import captured_stderr, captured_stdin, captured_stdout
 
-from syzygy.autodetector import MigrationAutodetector
+from syzygy.autodetector import STAGE_SPLIT, MigrationAutodetector
 from syzygy.compat import field_db_default_supported
 from syzygy.constants import Stage
 from syzygy.exceptions import AmbiguousStage
@@ -48,7 +48,7 @@ class AutodetectorTestCase(TestCase):
             questioner=questioner,
             style=self.style,
         )._detect_changes()
-        self.assertNotIn(MigrationAutodetector.STAGE_SPLIT, changes)
+        self.assertNotIn(STAGE_SPLIT, changes)
         return changes
 
 
