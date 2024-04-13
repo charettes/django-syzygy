@@ -388,6 +388,11 @@ class AutodetectorStageTests(AutodetectorTestCase):
             "- Remove field foo from bar",
             stderr.getvalue(),
         )
+        questioner = MigrationQuestioner({"ask_ambiguous_abort": True})
+        with self.assertRaisesMessage(SystemExit, "3"), mock.patch(
+            "syzygy.autodetector.partition_operations", side_effect=AmbiguousStage
+        ), captured_stderr() as stderr:
+            self.get_changes(from_models, to_models, questioner)["tests"]
 
 
 class InteractiveAutodetectorTests(AutodetectorTestCase):
@@ -474,4 +479,40 @@ class InteractiveAutodetectorTests(AutodetectorTestCase):
                 "This might cause downtime if your assumption is wrong"
             ),
             stdout.getvalue(),
+        )
+
+    def test_mixed_stage_failure(self):
+        from_models = [
+            ModelState("tests", "Foo", [("id", models.IntegerField(primary_key=True))]),
+            ModelState(
+                "tests",
+                "Bar",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("foo", models.ForeignKey("Foo", models.CASCADE)),
+                ],
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("bar", models.BooleanField(default=False)),
+                ],
+            ),
+        ]
+        with mock.patch(
+            "syzygy.autodetector.partition_operations", side_effect=AmbiguousStage
+        ), captured_stdin() as stdin, captured_stdout() as stdout, captured_stderr():
+            questioner = InteractiveMigrationQuestioner()
+            stdin.write("1\n")
+            stdin.seek(0)
+            self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(
+            stdout.getvalue(),
+            "\n 1) Let `makemigrations` complete. You'll have to manually break you operations in migrations "
+            "with non-ambiguous stages.\n 2) Abort `makemigrations`. You'll have to reduce the number of model "
+            "changes before running `makemigrations` again.\nSelect an option: ",
         )

@@ -314,23 +314,28 @@ class MigrationAutodetector(_MigrationAutodetector):
                     file=sys.stderr,
                 )
                 if self.has_interactive_questionner:
-                    choice = self.questioner._boolean_input(
-                        "Please select a fix:",
-                        [
-                            (
-                                "Let `makemigrations` complete. You'll have to "
-                                "manually break you operations in migrations "
-                                "with non-ambiguous stages."
-                            ),
-                            (
-                                "Abort `makemigrations` and and let me reduce "
-                                "my number of model changes before running "
-                                "`makemigrations` again."
-                            ),
-                        ],
+                    abort = (
+                        self.questioner._choice_input(
+                            "",
+                            [
+                                (
+                                    "Let `makemigrations` complete. You'll have to "
+                                    "manually break you operations in migrations "
+                                    "with non-ambiguous stages."
+                                ),
+                                (
+                                    "Abort `makemigrations`. You'll have to reduce "
+                                    "the number of model changes before running "
+                                    "`makemigrations` again."
+                                ),
+                            ],
+                        )
+                        == 2
                     )
-                    if not choice:
-                        sys.exit(3)
+                else:
+                    abort = self.questioner.defaults.get("ask_ambiguous_abort", False)
+                if abort:
+                    sys.exit(3)
                 continue
             if pre_operations and post_operations:
                 stage = OperationStage()
