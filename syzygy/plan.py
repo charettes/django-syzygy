@@ -54,7 +54,7 @@ def partition_operations(
             # If a pre-deploy operation is encountered after a post-deployment
             # one attempt to re-order operation is allowed.
             if all(
-                op.reduce(operation, app_label) is True for op in post_deploy_operations  # type: ignore
+                op.reduce(operation, app_label) is True for op in post_deploy_operations
             ):
                 stage_operations[Stage.PRE_DEPLOY].append(operation)
                 continue
@@ -162,14 +162,16 @@ def get_pre_deploy_plan(plan: Plan) -> Plan:
         if must_post_deploy_migration(migration, backward):
             post_deploy_plan[migration.app_label, migration.name] = migration
         else:
-            post_deploy_dep = post_deploy_plan and next(
-                (
-                    post_deploy_plan[dependency]
-                    for dependency in migration.dependencies
-                    if dependency in post_deploy_plan
-                ),
-                None,
-            )
+            post_deploy_dep = None
+            if post_deploy_plan:
+                post_deploy_dep = next(
+                    (
+                        post_deploy_plan[dependency]
+                        for dependency in migration.dependencies
+                        if dependency in post_deploy_plan
+                    ),
+                    None,
+                )
             if post_deploy_dep:
                 inferred = []
                 stage_defined = _get_defined_stage(migration) is not None

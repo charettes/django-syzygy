@@ -1,4 +1,4 @@
-from django.core.management.commands import makemigrations  # type: ignore
+from django.core.management.commands import makemigrations
 
 from syzygy.autodetector import MigrationAutodetector
 

@@ -6,11 +6,13 @@ from django.utils.functional import cached_property
 field_db_default_supported = django.VERSION >= (5,)
 
 try:
-    from django.db.migrations.autodetector import OperationDependency
+    from django.db.migrations.autodetector import (  # type: ignore[attr-defined]
+        OperationDependency,
+    )
 
 except ImportError:
 
-    class OperationDependency(
+    class OperationDependency(  # type: ignore[no-redef]
         namedtuple("OperationDependency", "app_label model_name field_name type")
     ):
         class Type:

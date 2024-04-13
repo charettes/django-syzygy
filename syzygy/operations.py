@@ -127,10 +127,10 @@ class PreRemoveField(operations.AlterField):
 if field_db_default_supported:
     # XXX: This allows for a more descriptive migration_name_fragment
     # to be associated with instances of AlterField.
-    operations.AlterField.migration_name_fragment = cached_property(
-        operations.AlterField.migration_name_fragment.fget
+    operations.AlterField.migration_name_fragment = cached_property(  # type: ignore[assignment,method-assign]
+        operations.AlterField.migration_name_fragment.fget  # type: ignore[attr-defined]
     )
-    operations.AlterField.migration_name_fragment.name = "migration_name_fragment"
+    operations.AlterField.migration_name_fragment.name = "migration_name_fragment"  # type: ignore[attr-defined]
 
     def get_pre_remove_field_operation(model_name, name, field, **kwargs):
         if field.db_default is not NOT_PROVIDED:
@@ -152,9 +152,9 @@ if field_db_default_supported:
         return operation
 
     # XXX: Shim kept for historical migrations generated before Django 5.
-    PreRemoveField = get_pre_remove_field_operation  # noqa: F811
+    PreRemoveField = get_pre_remove_field_operation  # type: ignore[assignment,misc] # noqa: F811
 else:
-    get_pre_remove_field_operation = PreRemoveField
+    get_pre_remove_field_operation = PreRemoveField  # type: ignore[assignment]
 
 
 class AddField(operations.AddField):
@@ -215,7 +215,7 @@ if field_db_default_supported:
         return operation
 
     # XXX: Shim kept for historical migrations generated before Django 5.
-    AddField = get_pre_add_field_operation  # noqa: F811
+    AddField = get_pre_add_field_operation  # type: ignore[assignment,misc] # noqa: F811
 else:
     get_pre_add_field_operation = AddField
 
@@ -297,7 +297,7 @@ if field_db_default_supported:
         return operation
 
     # XXX: Shim kept for historical migrations generated before Django 5.
-    PostAddField = get_post_add_field_operation  # noqa: F811
+    PostAddField = get_post_add_field_operation  # type: ignore[assignment,misc] # noqa: F811
 else:
     get_post_add_field_operation = PostAddField
 

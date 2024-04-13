@@ -5,7 +5,7 @@ from typing import Iterator
 
 from django.apps import apps
 from django.core.management import CommandError
-from django.core.management.commands import migrate  # type: ignore
+from django.core.management.commands import migrate
 from django.db import connections
 from django.db.migrations.exceptions import AmbiguityError
 from django.db.migrations.executor import MigrationExecutor

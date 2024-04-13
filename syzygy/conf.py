@@ -14,7 +14,7 @@ MIGRATION_STAGES_OVERRIDE: MigrationStagesSetting
 MIGRATION_STAGES_FALLBACK: MigrationStagesSetting
 
 
-def _configure():
+def _configure() -> None:
     global MIGRATION_STAGES_OVERRIDE
     global MIGRATION_STAGES_FALLBACK
     MIGRATION_STAGES_OVERRIDE = getattr(settings, "MIGRATION_STAGES_OVERRIDE", {})
