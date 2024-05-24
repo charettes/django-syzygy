@@ -248,8 +248,8 @@ class GetPreDeployPlanTests(SimpleTestCase):
             "Plan contains a non-contiguous sequence of pre-deployment migrations. "
             "Migration other.0001 is inferred to be applied pre-deployment but it "
             "depends on tests.0002 which is defined to be applied post-deployment. "
-            "Definining an explicit `Migration.stage: syzygy.Stage` for other.0001 "
-            "to bypass inferrence might help."
+            "Defining an explicit `Migration.stage: syzygy.Stage` for other.0001 "
+            "to bypass inference might help."
         )
         with self.assertRaisesMessage(AmbiguousPlan, msg):
             get_pre_deploy_plan(plan)
@@ -261,8 +261,8 @@ class GetPreDeployPlanTests(SimpleTestCase):
             "Plan contains a non-contiguous sequence of pre-deployment migrations. "
             "Migration other.0001 is inferred to be applied pre-deployment but it "
             "depends on tests.0002 which is inferred to be applied post-deployment. "
-            "Definining an explicit `Migration.stage: syzygy.Stage` for other.0001 "
-            "or tests.0002 to bypass inferrence might help."
+            "Defining an explicit `Migration.stage: syzygy.Stage` for other.0001 "
+            "or tests.0002 to bypass inference might help."
         )
         with self.assertRaisesMessage(AmbiguousPlan, msg):
             get_pre_deploy_plan(plan)
