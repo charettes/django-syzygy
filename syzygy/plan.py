@@ -1,6 +1,7 @@
 import hashlib
 from typing import Dict, List, Optional, Tuple
 
+from django.apps import apps
 from django.db.migrations import DeleteModel, Migration, RemoveField
 from django.db.migrations.operations.base import Operation
 
@@ -193,11 +194,43 @@ def get_pre_deploy_plan(plan: Plan) -> Plan:
                     f"{post_stage_origin} to be applied post-deployment."
                 )
                 if inferred:
-                    inferred_msg = " or ".join(map(str, inferred))
-                    msg += (
-                        f" Defining an explicit `Migration.stage: syzygy.Stage` "
-                        f"for {inferred_msg} to bypass inference might help."
-                    )
+                    first_party_inferred = []
+                    third_party_inferred = []
+                    for migration in inferred:
+                        try:
+                            app = apps.get_app_config(migration.app_label)
+                        except LookupError:
+                            pass
+                        else:
+                            if conf.is_third_party_app(app):
+                                third_party_inferred.append(str(migration))
+                                continue
+                        first_party_inferred.append(str(migration))
+                    if first_party_inferred:
+                        first_party_names = " or ".join(first_party_inferred)
+                        msg += (
+                            f" Defining an explicit `Migration.stage: syzygy.Stage` "
+                            f"for {first_party_names} "
+                        )
+                    if third_party_inferred:
+                        if first_party_inferred:
+                            msg += "or setting "
+                        else:
+                            msg += " Setting "
+                        msg += " or ".join(
+                            f"`MIGRATION_STAGES_OVERRIDE[{migration_name!r}]`"
+                            for migration_name in third_party_inferred
+                        )
+                        msg += " to an explicit `syzygy.Stage` "
+                    msg += "to bypass inference might help."
+                    for migration in inferred:
+                        try:
+                            app = apps.get_app_config(migration.app_label)
+                        except LookupError:
+                            continue
+                        if not conf.is_third_party_app(app):
+                            continue
+                        break
                 raise AmbiguousPlan(msg)
             pre_deploy_plan.append((migration, backward))
     return pre_deploy_plan

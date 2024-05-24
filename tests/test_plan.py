@@ -1,5 +1,9 @@
+import os
+import site
 from itertools import product
+from types import ModuleType
 
+from django.apps import AppConfig
 from django.conf import settings
 from django.db.migrations import CreateModel, DeleteModel, Migration
 from django.db.migrations.operations.base import Operation
@@ -265,4 +269,46 @@ class GetPreDeployPlanTests(SimpleTestCase):
             "or tests.0002 to bypass inference might help."
         )
         with self.assertRaisesMessage(AmbiguousPlan, msg):
+            get_pre_deploy_plan(plan)
+
+    def test_non_contiguous_deps_third_party(self):
+        pre_deploy_dep = Migration(app_label="third_party", name="0001")
+        pre_deploy_dep.operations = [
+            CreateModel("model", []),
+        ]
+        pre_deploy_dep.dependencies = [("tests", "0002")]
+        plan = [
+            (self.pre_deploy, False),
+            (self.post_deploy, False),
+            (pre_deploy_dep, False),
+        ]
+        msg = (
+            "Plan contains a non-contiguous sequence of pre-deployment migrations. "
+            "Migration third_party.0001 is inferred to be applied pre-deployment but it "
+            "depends on tests.0002 which is defined to be applied post-deployment. "
+            "Setting `MIGRATION_STAGES_OVERRIDE['third_party.0001']` to an explicit "
+            "`syzygy.Stage` to bypass inference might help."
+        )
+        third_party_module = ModuleType("third_party")
+        third_party_module.__file__ = os.path.join(site.PREFIXES[0], "third_party.py")
+        third_party_app_config = AppConfig("third_party", third_party_module)
+        with self.modify_settings(
+            INSTALLED_APPS={"append": [third_party_app_config]}
+        ), self.assertRaisesMessage(AmbiguousPlan, msg):
+            get_pre_deploy_plan(plan)
+        del self.post_deploy.stage
+        self.post_deploy.operations = [
+            DeleteModel("model"),
+        ]
+        msg = (
+            "Plan contains a non-contiguous sequence of pre-deployment migrations. "
+            "Migration third_party.0001 is inferred to be applied pre-deployment but it "
+            "depends on tests.0002 which is inferred to be applied post-deployment. "
+            "Defining an explicit `Migration.stage: syzygy.Stage` for tests.0002 or "
+            "setting `MIGRATION_STAGES_OVERRIDE['third_party.0001']` to an explicit "
+            "`syzygy.Stage` to bypass inference might help."
+        )
+        with self.modify_settings(
+            INSTALLED_APPS={"append": [third_party_app_config]}
+        ), self.assertRaisesMessage(AmbiguousPlan, msg):
             get_pre_deploy_plan(plan)
