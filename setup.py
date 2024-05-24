@@ -6,7 +6,7 @@ with open("README.rst") as file_:
 
 setup(
     name="django-syzygy",
-    version="1.0.1",
+    version="1.1.0",
     description="Deployment aware tooling for Django migrations.",
     long_description=long_description,
     long_description_content_type="text/x-rst",
