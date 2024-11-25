@@ -2,10 +2,10 @@ import os
 
 from . import *  # noqa
 
-DB_HOST = os.environ.get("DB_HOST", "localhost")
-DB_PORT = os.environ.get("DB_PORT", "5432")
-DB_USER = os.environ.get("DB_USER", "postgres")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "postgres")
+DB_HOST = os.environ.get("DB_POSTGRES_HOST", "localhost")
+DB_PORT = os.environ.get("DB_POSTGRES_PORT", "5432")
+DB_USER = os.environ.get("DB_POSTGRES_USER", "postgres")
+DB_PASSWORD = os.environ.get("DB_POSTGRES_PASSWORD", "postgres")
 
 DATABASES = {
     "default": {

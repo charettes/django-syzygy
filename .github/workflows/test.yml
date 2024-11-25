@@ -26,6 +26,20 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_USER: mysql
+          MYSQL_PASSWORD: mysql
+          MYSQL_DATABASE: syzygy
+          MYSQL_ROOT_PASSWORD: password
+        ports:
+        - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
     - uses: actions/checkout@v2
@@ -58,11 +72,14 @@ jobs:
       run: |
         tox
       env:
-        DB_NAME: postgres
-        DB_USER: postgres
-        DB_PASSWORD: postgres
-        DB_HOST: localhost
-        DB_PORT: 5432
+        DB_POSTGRES_USER: postgres
+        DB_POSTGRES_PASSWORD: postgres
+        DB_POSTGRES_HOST: localhost
+        DB_POSTGRES_PORT: 5432
+        DB_MYSQL_USER: root
+        DB_MYSQL_PASSWORD: password
+        DB_MYSQL_HOST: "127.0.0.1"
+        DB_MYSQL_PORT: 3306
 
     - name: Coveralls
       uses: AndreMiras/coveralls-python-action@develop
