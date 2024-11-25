@@ -17,9 +17,13 @@ Inspired by a `2015 post from Ludwig Hähne`_ and experience dealing with migrat
 .. _`2015 post from Ludwig Hähne`: https://pankrat.github.io/2015/django-migrations-without-downtimes/#django-wishlist
 .. _Zapier: https://zapier.com
 
-Currently only supports PostgreSQL and SQLite as they are the only two FOSS
-core backends that support transactional DDL and this tool is built around
-that expectation.
+Currently only tested against PostgreSQL, SQLite, and MySQL.
+
+Note that while MySQL is supported it doesn't support transactional DDL meaning
+it will `require manual intervention if a migration fails to apply`_ which makes
+problematic to use in an automated CI/CD setup.
+
+.. _`require manual intervention if a migration fails to apply`: https://docs.djangoproject.com/en/5.1/topics/migrations/#mysql
 
 Installation
 ------------
