@@ -27,8 +27,12 @@ class Command(makemigrations.Command):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs, style=style)
 
-        makemigrations.MigrationAutodetector = StyledMigrationAutodetector
+        if hasattr(self, "autodetector"):
+            self.autodetector = StyledMigrationAutodetector
+        else:
+            makemigrations.MigrationAutodetector = StyledMigrationAutodetector
         try:
             super().handle(*args, **options)
         finally:
-            makemigrations.MigrationAutodetector = MigrationAutodetector_
+            if not hasattr(self, "autodetector"):
+                makemigrations.MigrationAutodetector = MigrationAutodetector_
