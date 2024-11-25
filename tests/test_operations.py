@@ -7,7 +7,7 @@ from django.db.migrations.optimizer import MigrationOptimizer
 from django.db.migrations.serializer import OperationSerializer
 from django.db.migrations.state import ProjectState
 from django.db.models.fields import NOT_PROVIDED
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 
 from syzygy.autodetector import MigrationAutodetector
 from syzygy.compat import field_db_default_supported
@@ -19,8 +19,36 @@ from syzygy.operations import (
 )
 from syzygy.plan import get_operation_stage
 
+if connection.features.can_rollback_ddl:
+    SchemaTestCase = TestCase
+else:
 
-class OperationTestCase(TestCase):
+    class SchemaTestCase(TransactionTestCase):
+        @classmethod
+        def setUpClass(cls):
+            super().setUpClass()
+            with connection.cursor() as cursor:
+                cls.tables = {
+                    table.name
+                    for table in connection.introspection.get_table_list(cursor)
+                }
+
+        def tearDown(self):
+            super().tearDown()
+            with connection.cursor() as cursor:
+                created_tables = {
+                    table.name
+                    for table in connection.introspection.get_table_list(cursor)
+                } - self.tables
+            if created_tables:
+                with connection.schema_editor() as schema_editor:
+                    sql_delete_table = schema_editor.sql_delete_table
+                for table in created_tables:
+                    with connection.cursor() as cursor:
+                        cursor.execute(sql_delete_table % {"table": table})
+
+
+class OperationTestCase(SchemaTestCase):
     @classmethod
     def setUpClass(cls):
         connection.disable_constraint_checking()
