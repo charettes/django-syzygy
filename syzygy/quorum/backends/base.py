@@ -19,7 +19,6 @@ class QuorumBase(ABC):
     @abstractmethod
     def join(self, namespace: str, quorum: int) -> bool:
         """Join the `namespace` and return whether or not `quorum` was attained."""
-        ...
 
     @abstractmethod
     def sever(self, namespace: str, quorum: int):
@@ -33,4 +32,3 @@ class QuorumBase(ABC):
         Raise `QuorumDisolved` if the quorom attainment process was
         severed.
         """
-        ...
