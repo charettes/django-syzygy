@@ -29,13 +29,10 @@ def _alter_field_db_default(schema_editor, model, name, drop=False):
 
 @contextmanager
 def _force_field_alteration(schema_editor):
-    # Django 3.2 implements an optimization to prevent SQLite table rebuilds
+    # Django implements an optimization to prevent SQLite table rebuilds
     # when unnecessary. Until proper db_default alteration support lands this
     # optimization has to be disabled under some circumstances.
-    _field_should_be_altered = getattr(schema_editor, "_field_should_be_altered", None)
-    if _field_should_be_altered is None:
-        yield
-        return
+    _field_should_be_altered = schema_editor._field_should_be_altered
     schema_editor._field_should_be_altered = lambda old_field, new_field: True
     try:
         yield
