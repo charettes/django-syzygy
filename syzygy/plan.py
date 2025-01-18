@@ -36,12 +36,13 @@ def partition_operations(
     app_label: str,
 ) -> tuple[list[Operation], list[Operation]]:
     """
-    Partition an ordered list of operations by :class:`syzygy.constants.Stage`.
+    Partition an ordered list of operations by :class:`syzygy.constants.Stage.PRE_DEPLOY`.
 
-    If `operations` is composed of members with a
-    :attr:`syzygy.constants.Stage.PRE_DEPLOY` stage after members with a
-    :attr:`syzygy.constants.Stage.PRE_DEPLOY` stage and cannot be reordered a
-    :class:`syzygy.exceptions.AmbiguousStage` exception will be raised.
+    If `operations` contains
+    :attr:`syzygy.constants.Stage.POST_DEPLOY` stage members followed
+    :attr:`syzygy.constants.Stage.PRE_DEPLOY` stage members and they cannot be
+    reordered a :class:`syzygy.exceptions.AmbiguousStage` exception will be
+    raised.
     """
     stage_operations: dict[Stage, list[Operation]] = {
         Stage.PRE_DEPLOY: [],
@@ -51,8 +52,8 @@ def partition_operations(
     for operation in operations:
         operation_stage = get_operation_stage(operation)
         if operation_stage is Stage.PRE_DEPLOY and post_deploy_operations:
-            # If a pre-deploy operation is encountered after a post-deployment
-            # one attempt to re-order operation is allowed.
+            # Attempt to re-order `operation` if a pre-deploy stage one is
+            # encountered after a post-deployment one if allowed.
             if all(
                 op.reduce(operation, app_label) is True for op in post_deploy_operations
             ):
