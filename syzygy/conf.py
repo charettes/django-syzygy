@@ -1,5 +1,4 @@
 import site
-from typing import Dict, Optional
 
 from django.apps import AppConfig, apps
 from django.conf import settings
@@ -12,7 +11,7 @@ __all__ = (
     "is_third_party_app",
 )
 
-MigrationStagesSetting = Dict[str, Stage]
+MigrationStagesSetting = dict[str, Stage]
 
 MIGRATION_STAGES_OVERRIDE: MigrationStagesSetting
 MIGRATION_STAGES_FALLBACK: MigrationStagesSetting
@@ -34,7 +33,7 @@ def _configure() -> None:
     global MIGRATION_STAGES_FALLBACK
     MIGRATION_STAGES_OVERRIDE = getattr(settings, "MIGRATION_STAGES_OVERRIDE", {})
     MIGRATION_STAGES_FALLBACK = getattr(settings, "MIGRATION_STAGES_FALLBACK", {})
-    third_party_stages_fallback: Optional[Stage] = getattr(
+    third_party_stages_fallback: Stage | None = getattr(
         settings, "MIGRATION_THIRD_PARTY_STAGES_FALLBACK", Stage.PRE_DEPLOY
     )
     if third_party_stages_fallback:

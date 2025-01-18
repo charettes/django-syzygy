@@ -1,5 +1,3 @@
-from typing import Optional, Tuple
-
 from django.core.cache import DEFAULT_CACHE_ALIAS, caches
 
 from ..exceptions import QuorumDisolved
@@ -13,14 +11,14 @@ class CacheQuorum(QuorumBase):
         self,
         alias: str = DEFAULT_CACHE_ALIAS,
         timeout: int = 3600,
-        version: Optional[int] = None,
+        version: int | None = None,
     ):
         self.cache = caches[alias]
         self.timeout = timeout
         self.version = version
 
     @classmethod
-    def _get_namespace_keys(cls, namespace: str) -> Tuple[str, str]:
+    def _get_namespace_keys(cls, namespace: str) -> tuple[str, str]:
         namespace_key = cls.namespace_key_format.format(namespace=namespace)
         clear_namespace_key = f"{namespace_key}:clear"
         return namespace_key, clear_namespace_key

@@ -1,4 +1,3 @@
-from typing import List, Optional, Tuple
 from unittest import mock, skipUnless
 
 from django.db import connection, migrations, models
@@ -61,7 +60,7 @@ class OperationTestCase(SchemaTestCase):
 
     @staticmethod
     def apply_operation(
-        operation: Operation, state: Optional[ProjectState] = None
+        operation: Operation, state: ProjectState | None = None
     ) -> ProjectState:
         if state is None:
             from_state = ProjectState()
@@ -75,14 +74,14 @@ class OperationTestCase(SchemaTestCase):
 
     @classmethod
     def apply_operations(
-        cls, operations: List[Operation], state: Optional[ProjectState] = None
-    ) -> Optional[ProjectState]:
+        cls, operations: list[Operation], state: ProjectState | None = None
+    ) -> ProjectState | None:
         for operation in operations:
             state = cls.apply_operation(operation, state)
         return state
 
     def assert_optimizes_to(
-        self, operations: List[Operation], expected: List[Operation]
+        self, operations: list[Operation], expected: list[Operation]
     ):
         optimized = MigrationOptimizer().optimize(operations, "tests")
         deep_deconstruct = MigrationAutodetector(
@@ -155,7 +154,7 @@ class PreAddFieldTests(OperationTestCase):
 class PostAddFieldTests(OperationTestCase):
     def test_database_forwards(
         self, preserve_default=True
-    ) -> Tuple[ProjectState, ProjectState]:
+    ) -> tuple[ProjectState, ProjectState]:
         model_name = "TestModel"
         field_name = "foo"
         field = models.IntegerField(default=42)

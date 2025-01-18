@@ -1,4 +1,3 @@
-from typing import List, Optional
 from unittest import mock, skipUnless
 
 from django.core.management.color import color_style
@@ -30,7 +29,7 @@ class AutodetectorTestCase(TestCase):
     style = color_style()
 
     @staticmethod
-    def make_project_state(model_states: List[ModelState]) -> ProjectState:
+    def make_project_state(model_states: list[ModelState]) -> ProjectState:
         project_state = ProjectState()
         for model_state in model_states:
             project_state.add_model(model_state.clone())
@@ -38,10 +37,10 @@ class AutodetectorTestCase(TestCase):
 
     def get_changes(
         self,
-        before_states: List[ModelState],
-        after_states: List[ModelState],
-        questioner: Optional[MigrationQuestioner] = None,
-    ) -> List[migrations.Migration]:
+        before_states: list[ModelState],
+        after_states: list[ModelState],
+        questioner: MigrationQuestioner | None = None,
+    ) -> list[migrations.Migration]:
         changes = MigrationAutodetector(
             self.make_project_state(before_states),
             self.make_project_state(after_states),

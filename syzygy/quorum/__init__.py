@@ -1,5 +1,4 @@
 from functools import lru_cache
-from typing import Union
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
@@ -19,7 +18,7 @@ def _get_quorum(backend_path, **backend_options) -> QuorumBase:
 
 def _get_configured_quorum() -> QuorumBase:
     try:
-        config: Union[dict, str] = settings.MIGRATION_QUORUM_BACKEND  # type: ignore
+        config: dict | str = settings.MIGRATION_QUORUM_BACKEND  # type: ignore
     except AttributeError:
         raise ImproperlyConfigured(
             "The `MIGRATION_QUORUM_BACKEND` setting must be configured "

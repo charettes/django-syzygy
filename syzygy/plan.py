@@ -1,5 +1,4 @@
 import hashlib
-from typing import Dict, List, Optional, Tuple
 
 from django.apps import apps
 from django.db.migrations import DeleteModel, Migration, RemoveField
@@ -9,7 +8,7 @@ from . import conf
 from .constants import Stage
 from .exceptions import AmbiguousPlan, AmbiguousStage
 
-Plan = List[Tuple[Migration, bool]]
+Plan = list[tuple[Migration, bool]]
 
 
 def hash_plan(plan: Plan) -> str:
@@ -33,9 +32,9 @@ def get_operation_stage(operation: Operation) -> Stage:
 
 
 def partition_operations(
-    operations: List[Operation],
+    operations: list[Operation],
     app_label: str,
-) -> Tuple[List[Operation], List[Operation]]:
+) -> tuple[list[Operation], list[Operation]]:
     """
     Partition an ordered list of operations by :class:`syzygy.constants.Stage`.
 
@@ -44,7 +43,7 @@ def partition_operations(
     :attr:`syzygy.constants.Stage.PRE_DEPLOY` stage and cannot be reordered a
     :class:`syzygy.exceptions.AmbiguousStage` exception will be raised.
     """
-    stage_operations: Dict[Stage, List[Operation]] = {
+    stage_operations: dict[Stage, list[Operation]] = {
         Stage.PRE_DEPLOY: [],
         Stage.POST_DEPLOY: [],
     }
@@ -67,7 +66,7 @@ def partition_operations(
     return stage_operations[Stage.PRE_DEPLOY], post_deploy_operations
 
 
-def _get_migration_stage_override(migration: Migration) -> Optional[Stage]:
+def _get_migration_stage_override(migration: Migration) -> Stage | None:
     """
     Return the `Stage` override configured through setting:`MIGRATION_STAGES_OVERRIDE`
     of the migration.
@@ -78,7 +77,7 @@ def _get_migration_stage_override(migration: Migration) -> Optional[Stage]:
     )
 
 
-def _get_migration_stage_fallback(migration: Migration) -> Optional[Stage]:
+def _get_migration_stage_fallback(migration: Migration) -> Stage | None:
     """
     Return the `Stage` fallback configured through setting:`MIGRATION_STAGES_FALLBACK`
     of the migration.
@@ -89,7 +88,7 @@ def _get_migration_stage_fallback(migration: Migration) -> Optional[Stage]:
     )
 
 
-def _get_defined_stage(migration: Migration) -> Optional[Stage]:
+def _get_defined_stage(migration: Migration) -> Stage | None:
     """
     Return the explicitly defined `Stage` of a migration or
     `None` if not defined.
@@ -97,7 +96,7 @@ def _get_defined_stage(migration: Migration) -> Optional[Stage]:
     return getattr(migration, "stage", None) or _get_migration_stage_override(migration)
 
 
-def get_migration_stage(migration: Migration) -> Optional[Stage]:
+def get_migration_stage(migration: Migration) -> Stage | None:
     """
     Return the `Stage` of the migration.
 
@@ -130,7 +129,7 @@ def get_migration_stage(migration: Migration) -> Optional[Stage]:
 
 def must_post_deploy_migration(
     migration: Migration, backward: bool = False
-) -> Optional[bool]:
+) -> bool | None:
     """
     Return whether or not migration must be run after deployment.
 

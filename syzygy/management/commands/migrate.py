@@ -1,7 +1,7 @@
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import timedelta
-from typing import Iterator
 
 from django.apps import apps
 from django.core.management import CommandError
@@ -12,12 +12,7 @@ from django.db.migrations.executor import MigrationExecutor
 
 from syzygy.constants import Stage
 from syzygy.plan import Plan, get_pre_deploy_plan, hash_plan
-from syzygy.quorum import (
-    QuorumDisolved,
-    join_quorum,
-    poll_quorum,
-    sever_quorum,
-)
+from syzygy.quorum import QuorumDisolved, join_quorum, poll_quorum, sever_quorum
 
 
 class PreDeployMigrationExecutor(MigrationExecutor):
