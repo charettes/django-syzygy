@@ -8,6 +8,7 @@
 - Add support for Django 5.2 and Python 3.13.
 - Drop support for Python 3.8.
 - Ensure staged renames and alters are properly serialized. (#52)
+- Address improper handling of rename operation questioning. (#53)
 
 1.1.0
 =====
