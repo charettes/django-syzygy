@@ -230,14 +230,14 @@ class AutodetectorTests(AutodetectorTestCase):
         with captured_stderr(), self.assertRaisesMessage(SystemExit, "3"):
             self.get_changes(from_models, to_models, questioner)["tests"]
         # Pre-deploy rename.
-        questioner.defaults["ask_rename_field_stage"] = 1
+        questioner.defaults["ask_rename_field_stage"] = 2
         with captured_stderr():
             changes = self.get_changes(from_models, to_models, questioner)["tests"]
         self.assertEqual(len(changes), 1)
         self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
         self.assertIsInstance(changes[0].operations[0], RenameField)
         # Post-deploy rename.
-        questioner.defaults["ask_rename_field_stage"] = 2
+        questioner.defaults["ask_rename_field_stage"] = 3
         with captured_stderr():
             changes = self.get_changes(from_models, to_models, questioner)["tests"]
         self.assertEqual(len(changes), 1)
@@ -271,14 +271,14 @@ class AutodetectorTests(AutodetectorTestCase):
         with captured_stderr(), self.assertRaisesMessage(SystemExit, "3"):
             self.get_changes(from_models, to_models, questioner)["tests"]
         # Pre-deploy rename.
-        questioner.defaults["ask_rename_model_stage"] = 1
+        questioner.defaults["ask_rename_model_stage"] = 2
         with captured_stderr():
             changes = self.get_changes(from_models, to_models, questioner)["tests"]
         self.assertEqual(len(changes), 1)
         self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
         self.assertIsInstance(changes[0].operations[0], RenameModel)
         # Post-deploy rename.
-        questioner.defaults["ask_rename_model_stage"] = 2
+        questioner.defaults["ask_rename_model_stage"] = 3
         with captured_stderr():
             changes = self.get_changes(from_models, to_models, questioner)["tests"]
         self.assertEqual(len(changes), 1)

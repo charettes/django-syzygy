@@ -88,7 +88,7 @@ class MigrationAutodetector(_MigrationAutodetector):
                 ),
                 file=sys.stderr,
             )
-            choice = self.questioner.defaults.get("ask_rename_field_stage", 0)
+            choice = self.questioner.defaults.get("ask_rename_field_stage", 1)
             if self.has_interactive_questionner:
                 choice = self.questioner._choice_input(
                     "Please choose an appropriate action to take:",
@@ -113,10 +113,10 @@ class MigrationAutodetector(_MigrationAutodetector):
                         ),
                     ],
                 )
-            if choice == 0:
+            if choice == 1:
                 sys.exit(3)
             else:
-                stage = Stage.PRE_DEPLOY if choice == 1 else Stage.POST_DEPLOY
+                stage = Stage.PRE_DEPLOY if choice == 2 else Stage.POST_DEPLOY
                 operation = RenameField.for_stage(operation, stage)
         if isinstance(operation, operations.RenameModel):
             from_db_table = (
@@ -135,7 +135,7 @@ class MigrationAutodetector(_MigrationAutodetector):
                     ),
                     file=sys.stderr,
                 )
-                choice = self.questioner.defaults.get("ask_rename_model_stage", 0)
+                choice = self.questioner.defaults.get("ask_rename_model_stage", 1)
                 if self.has_interactive_questionner:
                     choice = self.questioner._choice_input(
                         "Please choose an appropriate action to take:",
@@ -161,10 +161,10 @@ class MigrationAutodetector(_MigrationAutodetector):
                             ),
                         ],
                     )
-                if choice == 0:
+                if choice == 1:
                     sys.exit(3)
                 else:
-                    stage = Stage.PRE_DEPLOY if choice == 1 else Stage.POST_DEPLOY
+                    stage = Stage.PRE_DEPLOY if choice == 2 else Stage.POST_DEPLOY
                     operation = RenameModel.for_stage(operation, stage)
         elif isinstance(operation, operations.AlterField) and not operation.field.null:
             # Addition of not-NULL constraints must be performed post-deployment.
