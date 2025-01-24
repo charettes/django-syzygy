@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TypeVar
 from unittest import mock, skipUnless
 
 from django.db import connection, migrations, models
@@ -6,6 +6,7 @@ from django.db.migrations.operations.base import Operation
 from django.db.migrations.optimizer import MigrationOptimizer
 from django.db.migrations.serializer import OperationSerializer
 from django.db.migrations.state import ProjectState
+from django.db.migrations.writer import OperationWriter
 from django.db.models.fields import NOT_PROVIDED
 from django.test import TestCase, TransactionTestCase
 
@@ -13,6 +14,9 @@ from syzygy.autodetector import MigrationAutodetector
 from syzygy.compat import field_db_default_supported
 from syzygy.constants import Stage
 from syzygy.operations import (
+    AlterField,
+    RenameField,
+    RenameModel,
     get_post_add_field_operation,
     get_pre_add_field_operation,
     get_pre_remove_field_operation,
@@ -46,6 +50,9 @@ else:
                 for table in created_tables:
                     with connection.cursor() as cursor:
                         cursor.execute(sql_delete_table % {"table": table})
+
+
+O = TypeVar("O", bound=Operation)
 
 
 class OperationTestCase(SchemaTestCase):
@@ -89,6 +96,21 @@ class OperationTestCase(SchemaTestCase):
             ProjectState(), ProjectState()
         ).deep_deconstruct
         self.assertEqual(deep_deconstruct(optimized), deep_deconstruct(expected))
+
+    def serde_roundtrip(self, operation: O) -> O:
+        serialized, imports = OperationWriter(operation, indentation=0).serialize()
+        locals = {}
+        exec(
+            "\n".join(list(imports) + [f"operation = {serialized[:-1]}"]),
+            {},
+            locals,
+        )
+        return locals["operation"]
+
+    def assert_serde_roundtrip_equal(self, operation: Operation):
+        self.assertEqual(
+            self.serde_roundtrip(operation).deconstruct(), operation.deconstruct()
+        )
 
 
 class PreAddFieldTests(OperationTestCase):
@@ -436,3 +458,35 @@ class PreRemoveFieldTests(OperationTestCase):
             get_pre_remove_field_operation(
                 "model", "field", models.IntegerField(db_default=42)
             )
+
+
+class RenameFieldTests(OperationTestCase):
+    def test_serialization(self):
+        self.assert_serde_roundtrip_equal(
+            RenameField("model", "old_field", "new_field", stage=Stage.POST_DEPLOY)
+        )
+
+
+class RenameModelTests(OperationTestCase):
+    def test_serialization(self):
+        self.assert_serde_roundtrip_equal(
+            RenameModel("old_name", "new_name", stage=Stage.POST_DEPLOY)
+        )
+
+
+class AlterFieldTests(OperationTestCase):
+    def test_serialization(self):
+        operation = self.serde_roundtrip(
+            AlterField(
+                "model",
+                "field",
+                models.IntegerField(),
+                Stage.PRE_DEPLOY,
+            )
+        )
+        self.assertEqual(operation.model_name, "model")
+        self.assertEqual(operation.name, "field")
+        self.assertEqual(
+            operation.field.deconstruct(), models.IntegerField().deconstruct()
+        )
+        self.assertEqual(operation.stage, Stage.PRE_DEPLOY)

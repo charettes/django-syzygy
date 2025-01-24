@@ -324,6 +324,13 @@ class RenameField(StagedOperation, operations.RenameField):
     instances where a rename operation is safe to perform.
     """
 
+    # XXX: Explicitly define the signature as migration serializer rely on
+    # __init__ introspection to assign the kwargs.
+    def __init__(self, model_name, old_name, new_name, stage):
+        super().__init__(
+            model_name=model_name, old_name=old_name, new_name=new_name, stage=stage
+        )
+
 
 class RenameModel(StagedOperation, operations.RenameModel):
     """
@@ -331,8 +338,24 @@ class RenameModel(StagedOperation, operations.RenameModel):
     instances where a rename operation is safe to perform.
     """
 
+    # XXX: Explicitly define the signature as migration serializer rely on
+    # __init__ introspection to assign the kwargs.
+    def __init__(self, old_name, new_name, stage):
+        super().__init__(old_name=old_name, new_name=new_name, stage=stage)
+
 
 class AlterField(StagedOperation, operations.AlterField):
     """
     Subclass of ``AlterField`` that allows explicitly defining a stage.
     """
+
+    # XXX: Explicitly define the signature as migration serializer rely on
+    # __init__ introspection to assign the kwargs.
+    def __init__(self, model_name, name, field, stage, preserve_default=True):
+        super().__init__(
+            model_name=model_name,
+            name=name,
+            field=field,
+            stage=stage,
+            preserve_default=preserve_default,
+        )
