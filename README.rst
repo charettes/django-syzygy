@@ -1,8 +1,8 @@
 django-syzygy
 =============
 
-.. image:: https://github.com/charettes/django-syzygy/workflows/Test/badge.svg
-    :target: https://github.com/charettes/django-syzygy/actions
+.. image:: https://github.com/charettes/django-syzygy/actions/workflows/test.yml/badge.svg?branch=master
+    :target: https://github.com/charettes/django-syzygy/actions?query=branch%3Amaster
     :alt: Build Status
 
 .. image:: https://coveralls.io/repos/github/charettes/django-syzygy/badge.svg?branch=master
