@@ -1,4 +1,6 @@
+import inspect
 from contextlib import contextmanager
+from functools import wraps
 
 from django.db.migrations import operations
 from django.db.models.fields import NOT_PROVIDED
@@ -302,6 +304,48 @@ else:
 class StagedOperation(operations.base.Operation):
     stage: Stage
 
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+        for base in cls.__mro__:
+            # Alter the __init__ signature to allow the operation serializer to
+            # to inject stage as kwarg.
+            if not issubclass(base, StagedOperation) and (
+                __init__ := base.__dict__.get("__init__")
+            ):
+
+                @wraps(__init__)
+                def wrapper(self, *args, **kwargs):
+                    super(cls, self).__init__(*args, **kwargs)
+
+                signature = inspect.signature(__init__)
+                parameters = []
+                stage_parameter = inspect.Parameter(
+                    name="stage",
+                    kind=inspect.Parameter.KEYWORD_ONLY,
+                )
+                for parameter in signature.parameters.values():
+                    if (
+                        stage_parameter is not None
+                        and parameter.default is not inspect.Parameter.empty
+                    ):
+                        parameters.append(stage_parameter)
+                        stage_parameter = None
+                    if (
+                        stage_parameter is None
+                        and parameter.kind < inspect.Parameter.KEYWORD_ONLY
+                    ):
+                        parameter = parameter.replace(
+                            kind=inspect.Parameter.KEYWORD_ONLY
+                        )
+                    parameters.append(parameter)
+                if stage_parameter is not None:
+                    parameters.append(stage_parameter)
+
+                signature = signature.replace(parameters=parameters)
+                wrapper.__signature__ = signature
+                cls.__init__ = wrapper
+                break
+
     def __init__(self, *args, **kwargs):
         self.stage = kwargs.pop("stage")
         super().__init__(*args, **kwargs)
@@ -324,13 +368,6 @@ class RenameField(StagedOperation, operations.RenameField):
     instances where a rename operation is safe to perform.
     """
 
-    # XXX: Explicitly define the signature as migration serializer rely on
-    # __init__ introspection to assign the kwargs.
-    def __init__(self, model_name, old_name, new_name, stage):
-        super().__init__(
-            model_name=model_name, old_name=old_name, new_name=new_name, stage=stage
-        )
-
 
 class RenameModel(StagedOperation, operations.RenameModel):
     """
@@ -338,24 +375,8 @@ class RenameModel(StagedOperation, operations.RenameModel):
     instances where a rename operation is safe to perform.
     """
 
-    # XXX: Explicitly define the signature as migration serializer rely on
-    # __init__ introspection to assign the kwargs.
-    def __init__(self, old_name, new_name, stage):
-        super().__init__(old_name=old_name, new_name=new_name, stage=stage)
-
 
 class AlterField(StagedOperation, operations.AlterField):
     """
     Subclass of ``AlterField`` that allows explicitly defining a stage.
     """
-
-    # XXX: Explicitly define the signature as migration serializer rely on
-    # __init__ introspection to assign the kwargs.
-    def __init__(self, model_name, name, field, stage, preserve_default=True):
-        super().__init__(
-            model_name=model_name,
-            name=name,
-            field=field,
-            stage=stage,
-            preserve_default=preserve_default,
-        )

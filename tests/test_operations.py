@@ -481,7 +481,7 @@ class AlterFieldTests(OperationTestCase):
                 "model",
                 "field",
                 models.IntegerField(),
-                Stage.PRE_DEPLOY,
+                stage=Stage.PRE_DEPLOY,
             )
         )
         self.assertEqual(operation.model_name, "model")
