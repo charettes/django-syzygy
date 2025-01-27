@@ -14,11 +14,11 @@ from syzygy.autodetector import MigrationAutodetector
 from syzygy.compat import field_db_default_supported
 from syzygy.constants import Stage
 from syzygy.operations import (
-    AliasedRenameModel,
+    AliasModel,
     AlterField,
+    RenameAliasedModel,
     RenameField,
     RenameModel,
-    UnaliasModel,
     get_post_add_field_operation,
     get_pre_add_field_operation,
     get_pre_remove_field_operation,
@@ -496,11 +496,11 @@ class AlterFieldTests(OperationTestCase):
         self.assertEqual(operation.stage, Stage.PRE_DEPLOY)
 
 
-class AliasedRenameModelTests(OperationTestCase):
+class AliasModelTests(OperationTestCase):
     def test_describe(self):
         self.assertEqual(
-            AliasedRenameModel("OldName", "NewName").describe(),
-            "Rename model OldName to NewName while creating an alias for OldName",
+            AliasModel("OldName", "NewName").describe(),
+            "Alias model OldName to NewName",
         )
 
     def _apply_forwards(self):
@@ -514,7 +514,7 @@ class AliasedRenameModelTests(OperationTestCase):
         new_model_name = "NewTestModel"
         post_state = self.apply_operations(
             [
-                AliasedRenameModel(model_name, new_model_name),
+                AliasModel(model_name, new_model_name),
             ],
             pre_state,
         )
@@ -524,15 +524,16 @@ class AliasedRenameModelTests(OperationTestCase):
         (pre_state, _), (post_state, new_model_name) = self._apply_forwards()
         pre_model = pre_state.apps.get_model("tests", "testmodel")
         pre_obj = pre_model.objects.create(foo=1)
-        if connection.vendor == "sqlite":
-            # SQLite doesn't allow the usage of RETURNING in INSTEAD OF INSERT
-            # triggers and thus the object has to be refetched.
-            pre_obj = pre_model.objects.latest("pk")
         self.assertEqual(pre_model.objects.get(), pre_obj)
         post_model = post_state.apps.get_model("tests", new_model_name)
         self.assertEqual(post_model.objects.get().pk, pre_obj.pk)
         pre_model.objects.all().delete()
         post_obj = post_model.objects.create(foo=2)
+        # XXX: Does that make the option non-viable on SQLite?
+        if connection.vendor == "sqlite":
+            # SQLite doesn't allow the usage of RETURNING in INSTEAD OF INSERT
+            # triggers and thus the object has to be re-fetched.
+            post_obj = post_model.objects.latest("pk")
         self.assertEqual(post_model.objects.get(), post_obj)
         self.assertEqual(pre_model.objects.get().pk, post_obj.pk)
         pre_model.objects.update(foo=3)
@@ -541,7 +542,7 @@ class AliasedRenameModelTests(OperationTestCase):
     def test_database_backwards(self):
         (pre_state, model_name), (post_state, new_model_name) = self._apply_forwards()
         with connection.schema_editor() as schema_editor:
-            AliasedRenameModel(model_name, new_model_name).database_backwards(
+            AliasModel(model_name, new_model_name).database_backwards(
                 "tests", schema_editor, post_state, pre_state
             )
 
@@ -549,11 +550,11 @@ class AliasedRenameModelTests(OperationTestCase):
         model_name = "TestModel"
         new_model_name = "NewTestModel"
         operations = [
-            AliasedRenameModel(
+            AliasModel(
                 model_name,
                 new_model_name,
             ),
-            UnaliasModel(new_model_name, "tests_testmodel"),
+            RenameAliasedModel(model_name, new_model_name),
         ]
         self.assert_optimizes_to(
             operations, [migrations.RenameModel(model_name, new_model_name)]
