@@ -1,5 +1,7 @@
 from contextlib import contextmanager
 
+from django.db import connection
+from django.db.backends.utils import truncate_name
 from django.db.migrations import operations
 from django.db.models.fields import NOT_PROVIDED
 from django.utils.functional import cached_property
@@ -359,3 +361,226 @@ class AlterField(StagedOperation, operations.AlterField):
             stage=stage,
             preserve_default=preserve_default,
         )
+
+
+class AliasOperationMixin:
+    @staticmethod
+    def _create_instead_of_triggers(schema_editor, view_name, model):
+        """
+        SQLite requires INSTEAD OF triggers to be created for the view to
+        direct DML statements to the referenced table.
+        """
+        quote = schema_editor.quote_name
+        max_name_length = schema_editor.connection.ops.max_name_length()
+        opts = model._meta
+        view = quote(view_name)
+        table = quote(opts.db_table)
+        columns = [quote(field.column) for field in opts.local_fields]
+        pk = quote(opts.pk.column)
+        schema_editor.execute(
+            (
+                "CREATE TRIGGER {trigger} INSTEAD OF INSERT ON {view}\n"
+                "BEGIN\n"
+                "INSERT INTO {table}({fields}) VALUES({values});\n"
+                "END"
+            ).format(
+                trigger=quote(truncate_name(f"{view_name}_insert", max_name_length)),
+                view=view,
+                table=table,
+                fields=", ".join(columns),
+                values=", ".join(f"NEW.{column}" for column in columns),
+            )
+        )
+        for field, column in zip(opts.local_fields, columns):
+            schema_editor.execute(
+                (
+                    "CREATE TRIGGER {trigger} INSTEAD OF UPDATE OF {column} ON {view}\n"
+                    "BEGIN\n"
+                    "UPDATE {table} SET {column}=NEW.{column} WHERE {pk}=NEW.{pk};\n"
+                    "END"
+                ).format(
+                    trigger=quote(
+                        truncate_name(
+                            f"{view_name}_update_{field.name}", max_name_length
+                        )
+                    ),
+                    view=view,
+                    table=table,
+                    column=column,
+                    pk=pk,
+                )
+            )
+        schema_editor.execute(
+            (
+                "CREATE TRIGGER {trigger} INSTEAD OF DELETE ON {view}\n"
+                "BEGIN\n"
+                "DELETE FROM {table} WHERE {pk}=OLD.{pk};\n"
+                "END"
+            ).format(
+                trigger=quote(truncate_name(f"{view_name}_delete", max_name_length)),
+                view=view,
+                table=table,
+                pk=pk,
+            )
+        )
+
+    @staticmethod
+    def _get_truncated_name(app_label: str, name: str) -> str:
+        return truncate_name(
+            f"{app_label}_{name.lower()}",
+            connection.ops.max_name_length(),
+        )
+
+    @classmethod
+    def _create_view(cls, schema_editor, model, alias_name):
+        # XXX: Explicitly use connection to retrieve ops.max_name_length() and
+        # not schema_editor.connection as Django systematically use the default
+        # connection (see https://code.djangoproject.com/ticket/13528).
+        view_name = cls._get_truncated_name(model._meta.app_label, alias_name)
+        quote = schema_editor.quote_name
+        schema_editor.execute(
+            "CREATE VIEW {} AS SELECT * FROM {}".format(
+                quote(view_name), quote(model._meta.db_table)
+            )
+        )
+        if schema_editor.connection.vendor == "sqlite":
+            cls._create_instead_of_triggers(schema_editor, view_name, model)
+
+    @staticmethod
+    def _drop_view(schema_editor, view_name: str):
+        schema_editor.execute(
+            "DROP VIEW {}".format(schema_editor.quote_name(view_name))
+        )
+
+    @classmethod
+    def alias_model(cls, schema_editor, model, alias_name):
+        for many_to_many in model._meta.local_many_to_many:
+            through = many_to_many.remote_field.through
+            if through._meta.auto_created:
+                raise NotImplementedError(
+                    "Aliasing of models containing many-to-many fields "
+                    "without an explicit intermediary model (through) is not "
+                    "implemented."
+                )
+        cls._create_view(schema_editor, model, alias_name)
+
+    def unalias_model(cls, schema_editor, model, alias_name):
+        view_name = cls._get_truncated_name(model._meta.app_label, alias_name)
+        for many_to_many in model._meta.local_many_to_many:
+            through = many_to_many.remote_field.through
+            if through._meta.auto_created:
+                raise NotImplementedError(
+                    "Un-aliasing of models containing many-to-many fields "
+                    "without an explicit intermediary model (through) is not "
+                    "implemented."
+                )
+        cls._drop_view(schema_editor, view_name)
+
+
+class AliasModel(AliasOperationMixin, operations.models.ModelOperation):
+    """
+    First stage of alias-based `RenameModel` replacement.
+
+    Implements the alias creation for the table meant to be renamed.
+    """
+
+    stage = Stage.PRE_DEPLOY
+    alias_name: str
+
+    def __init__(self, name: str, alias_name: str):
+        self.alias_name = alias_name
+        super().__init__(name)
+
+    @cached_property
+    def alias_name_lower(self):
+        return self.alias_name.lower()
+
+    def state_forwards(self, app_label, state):
+        # Create an un-managed model to represent the alias.
+        aliased_model = state.models[app_label, self.name_lower].clone()
+        aliased_model.name = self.alias_name
+        aliased_model.options["managed"] = False
+        state.add_model(aliased_model)
+
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, self.name)
+        alias = schema_editor.connection.alias
+        if not self.allow_migrate_model(alias, model):
+            return
+        self.alias_model(schema_editor, model, self.alias_name)
+
+    def database_backwards(self, app_label, schema_editor, from_state, to_state):
+        model = from_state.apps.get_model(app_label, self.name)
+        alias = schema_editor.connection.alias
+        if not self.allow_migrate_model(alias, model):
+            return
+        self.unalias_model(schema_editor, model, self.alias_name)
+
+    def describe(self):
+        return f"Alias model {self.name} to {self.alias_name}"
+
+    def reduce(self, operation, app_label):
+        if (
+            isinstance(operation, RenameAliasedModel)
+            and operation.name_lower == operation.old_name_lower
+            and operation.new_name_lower == self.alias_name_lower
+        ):
+            return [operations.RenameModel(operation.old_name, operation.new_name)]
+        return super().reduce(operation, app_label)
+
+
+class RenameAliasedModel(AliasOperationMixin, operations.RenameModel):
+    """
+    Second stage of alias-based `RenameModel` replacements.
+
+    Implements the table renaming and alias removal.
+    """
+
+    stage = Stage.POST_DEPLOY
+
+    def state_forwards(self, app_label, state):
+        state.remove_model(app_label, self.new_name_lower)
+        super().state_forwards(app_label, state)
+
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        from_model = from_state.apps.get_model(app_label, self.old_name)
+        if not self.allow_migrate_model(schema_editor.connection.alias, from_model):
+            return
+        if schema_editor.connection.vendor == "mysql":
+            quote_name = schema_editor.quote_name
+            old_name = self._get_truncated_name(app_label, self.old_name)
+            new_name = self._get_truncated_name(app_label, self.new_name)
+            defunct_name = self._get_truncated_name(
+                app_label, f"{self.new_name}_defunct"
+            )
+            schema_editor.execute(
+                "RENAME TABLE %s TO %s, %s TO %s"
+                % (
+                    quote_name(new_name),
+                    quote_name(defunct_name),
+                    quote_name(old_name),
+                    quote_name(new_name),
+                )
+            )
+            # Simulate that the `from_state` already had the proper `db_table`
+            # assigned to prevent super() from attempting a RENAME.
+            from_state = from_state.clone()
+            from_state.models[app_label, self.old_name_lower].options[
+                "db_table"
+            ] = new_name
+            from_state.apps.clear_cache()
+            from_state.reload_model(app_label, self.old_name_lower)
+            self._drop_view(schema_editor, defunct_name)
+        else:
+            self.unalias_model(schema_editor, from_model, self.new_name)
+        super().database_forwards(app_label, schema_editor, from_state, to_state)
+
+    def database_backwards(self, app_label, schema_editor, from_state, to_state):
+        from_model = from_state.apps.get_model(app_label, self.new_name)
+        if not self.allow_migrate_model(schema_editor.connection.alias, from_model):
+            return
+        super().database_backwards(app_label, schema_editor, from_state, to_state)
+        self.alias_model(schema_editor, from_model, self.alias_name)
+
+    def describe(self):
+        return f"Rename model {self.old_name} to {self.new_name}"

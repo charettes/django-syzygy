@@ -14,7 +14,9 @@ from syzygy.autodetector import MigrationAutodetector
 from syzygy.compat import field_db_default_supported
 from syzygy.constants import Stage
 from syzygy.operations import (
+    AliasModel,
     AlterField,
+    RenameAliasedModel,
     RenameField,
     RenameModel,
     get_post_add_field_operation,
@@ -40,16 +42,18 @@ else:
         def tearDown(self):
             super().tearDown()
             with connection.cursor() as cursor:
-                created_tables = {
-                    table.name
+                created_tables = [
+                    (table_name, table.type == "v")
                     for table in connection.introspection.get_table_list(cursor)
-                } - self.tables
+                    if (table_name := table.name) not in self.tables
+                ]
             if created_tables:
-                with connection.schema_editor() as schema_editor:
-                    sql_delete_table = schema_editor.sql_delete_table
-                for table in created_tables:
+                for name, is_view in created_tables:
                     with connection.cursor() as cursor:
-                        cursor.execute(sql_delete_table % {"table": table})
+                        if is_view:
+                            cursor.execute(f"DROP VIEW {name}")
+                        else:
+                            cursor.execute(f"DROP TABLE {name}")
 
 
 O = TypeVar("O", bound=Operation)
@@ -490,3 +494,91 @@ class AlterFieldTests(OperationTestCase):
             operation.field.deconstruct(), models.IntegerField().deconstruct()
         )
         self.assertEqual(operation.stage, Stage.PRE_DEPLOY)
+
+
+class AliasModelTests(OperationTestCase):
+    def test_describe(self):
+        self.assertEqual(
+            AliasModel("OldName", "NewName").describe(),
+            "Alias model OldName to NewName",
+        )
+
+    def _apply_forwards(self):
+        model_name = "TestModel"
+        field = models.IntegerField()
+        pre_state = self.apply_operations(
+            [
+                migrations.CreateModel(model_name, [("foo", field)]),
+            ]
+        )
+        new_model_name = "NewTestModel"
+        post_state = self.apply_operations(
+            [
+                AliasModel(model_name, new_model_name),
+            ],
+            pre_state,
+        )
+        return (pre_state, model_name), (post_state, new_model_name)
+
+    def test_database_forwards(self):
+        (pre_state, _), (post_state, new_model_name) = self._apply_forwards()
+        pre_model = pre_state.apps.get_model("tests", "testmodel")
+        pre_obj = pre_model.objects.create(foo=1)
+        self.assertEqual(pre_model.objects.get(), pre_obj)
+        post_model = post_state.apps.get_model("tests", new_model_name)
+        self.assertEqual(post_model.objects.get().pk, pre_obj.pk)
+        pre_model.objects.all().delete()
+        post_obj = post_model.objects.create(foo=2)
+        # XXX: Does that make the option non-viable on SQLite?
+        if connection.vendor == "sqlite":
+            # SQLite doesn't allow the usage of RETURNING in INSTEAD OF INSERT
+            # triggers and thus the object has to be re-fetched.
+            post_obj = post_model.objects.latest("pk")
+        self.assertEqual(post_model.objects.get(), post_obj)
+        self.assertEqual(pre_model.objects.get().pk, post_obj.pk)
+        pre_model.objects.update(foo=3)
+        self.assertEqual(post_model.objects.get().foo, 3)
+
+    def test_database_backwards(self):
+        (pre_state, model_name), (post_state, new_model_name) = self._apply_forwards()
+        with connection.schema_editor() as schema_editor:
+            AliasModel(model_name, new_model_name).database_backwards(
+                "tests", schema_editor, post_state, pre_state
+            )
+
+    def test_elidable(self):
+        model_name = "TestModel"
+        new_model_name = "NewTestModel"
+        operations = [
+            AliasModel(
+                model_name,
+                new_model_name,
+            ),
+            RenameAliasedModel(model_name, new_model_name),
+        ]
+        self.assert_optimizes_to(
+            operations, [migrations.RenameModel(model_name, new_model_name)]
+        )
+
+
+class RenameAliasedModelTests(OperationTestCase):
+    def _apply_forwards(self):
+        model_name = "TestModel"
+        new_model_name = "NewTestModel"
+        field = models.IntegerField()
+        pre_state = self.apply_operations(
+            [
+                migrations.CreateModel(model_name, [("foo", field)]),
+                AliasModel(model_name, new_model_name),
+            ]
+        )
+        post_state = self.apply_operations(
+            [
+                RenameAliasedModel(model_name, new_model_name),
+            ],
+            pre_state,
+        )
+        return (pre_state, model_name), (post_state, new_model_name)
+
+    def test_database_forward(self):
+        (pre_state, _), (post_state, new_model_name) = self._apply_forwards()
