@@ -425,9 +425,9 @@ class AliasOperationMixin:
         )
 
     @staticmethod
-    def _get_view_name(app_label, alias_name):
+    def _get_truncated_name(app_label: str, name: str) -> str:
         return truncate_name(
-            "%s_%s" % (app_label, alias_name.lower()),
+            f"{app_label}_{name.lower()}",
             connection.ops.max_name_length(),
         )
 
@@ -436,7 +436,7 @@ class AliasOperationMixin:
         # XXX: Explicitly use connection to retrieve ops.max_name_length() and
         # not schema_editor.connection as Django systematically use the default
         # connection (see https://code.djangoproject.com/ticket/13528).
-        view_name = cls._get_view_name(model._meta.app_label, alias_name)
+        view_name = cls._get_truncated_name(model._meta.app_label, alias_name)
         quote = schema_editor.quote_name
         schema_editor.execute(
             "CREATE VIEW {} AS SELECT * FROM {}".format(
@@ -465,7 +465,7 @@ class AliasOperationMixin:
         cls._create_view(schema_editor, model, alias_name)
 
     def unalias_model(cls, schema_editor, model, alias_name):
-        view_name = cls._get_view_name(model._meta.app_label, alias_name)
+        view_name = cls._get_truncated_name(model._meta.app_label, alias_name)
         for many_to_many in model._meta.local_many_to_many:
             through = many_to_many.remote_field.through
             if through._meta.auto_created:
@@ -539,14 +539,40 @@ class RenameAliasedModel(AliasOperationMixin, operations.RenameModel):
     stage = Stage.POST_DEPLOY
 
     def state_forwards(self, app_label, state):
-        state.remove_model(app_label, self.new_name)
+        state.remove_model(app_label, self.new_name_lower)
         super().state_forwards(app_label, state)
 
     def database_forwards(self, app_label, schema_editor, from_state, to_state):
-        to_model = to_state.apps.get_model(app_label, self.new_name)
-        if not self.allow_migrate_model(schema_editor.connection.alias, to_model):
+        from_model = from_state.apps.get_model(app_label, self.old_name)
+        if not self.allow_migrate_model(schema_editor.connection.alias, from_model):
             return
-        self.unalias_model(schema_editor, to_model, self.alias_name)
+        if schema_editor.connection.vendor == "mysql":
+            quote_name = schema_editor.quote_name
+            old_name = self._get_truncated_name(app_label, self.old_name)
+            new_name = self._get_truncated_name(app_label, self.new_name)
+            defunct_name = self._get_truncated_name(
+                app_label, f"{self.new_name}_defunct"
+            )
+            schema_editor.execute(
+                "RENAME TABLE %s TO %s, %s TO %s"
+                % (
+                    quote_name(new_name),
+                    quote_name(defunct_name),
+                    quote_name(old_name),
+                    quote_name(new_name),
+                )
+            )
+            # Simulate that the `from_state` already had the proper `db_table`
+            # assigned to prevent super() from attempting a RENAME.
+            from_state = from_state.clone()
+            from_state.models[app_label, self.old_name_lower].options[
+                "db_table"
+            ] = new_name
+            from_state.apps.clear_cache()
+            from_state.reload_model(app_label, self.old_name_lower)
+            self._drop_view(schema_editor, defunct_name)
+        else:
+            self.unalias_model(schema_editor, from_model, self.new_name)
         super().database_forwards(app_label, schema_editor, from_state, to_state)
 
     def database_backwards(self, app_label, schema_editor, from_state, to_state):
@@ -557,4 +583,4 @@ class RenameAliasedModel(AliasOperationMixin, operations.RenameModel):
         self.alias_model(schema_editor, from_model, self.alias_name)
 
     def describe(self):
-        return f"Rename model {self.name} to {self.alias_name}"
+        return f"Rename model {self.old_name} to {self.new_name}"

@@ -559,3 +559,26 @@ class AliasModelTests(OperationTestCase):
         self.assert_optimizes_to(
             operations, [migrations.RenameModel(model_name, new_model_name)]
         )
+
+
+class RenameAliasedModelTests(OperationTestCase):
+    def _apply_forwards(self):
+        model_name = "TestModel"
+        new_model_name = "NewTestModel"
+        field = models.IntegerField()
+        pre_state = self.apply_operations(
+            [
+                migrations.CreateModel(model_name, [("foo", field)]),
+                AliasModel(model_name, new_model_name),
+            ]
+        )
+        post_state = self.apply_operations(
+            [
+                RenameAliasedModel(model_name, new_model_name),
+            ],
+            pre_state,
+        )
+        return (pre_state, model_name), (post_state, new_model_name)
+
+    def test_database_forward(self):
+        (pre_state, _), (post_state, new_model_name) = self._apply_forwards()
