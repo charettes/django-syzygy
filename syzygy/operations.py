@@ -122,14 +122,8 @@ class PreRemoveField(operations.AlterField):
 
 
 if field_db_default_supported:
-    # XXX: This allows for a more descriptive migration_name_fragment
-    # to be associated with instances of AlterField.
-    operations.AlterField.migration_name_fragment = cached_property(  # type: ignore[assignment,method-assign]
-        operations.AlterField.migration_name_fragment.fget  # type: ignore[attr-defined]
-    )
-    operations.AlterField.migration_name_fragment.name = "migration_name_fragment"  # type: ignore[attr-defined]
 
-    def get_pre_remove_field_operation(model_name, name, field, **kwargs):
+    def get_pre_remove_field_operation(model_name, name, field):
         if field.db_default is not NOT_PROVIDED:
             raise ValueError(
                 "Fields with a db_default don't require a pre-deployment operation."
@@ -143,7 +137,7 @@ if field_db_default_supported:
             field.null = True
             fragment = f"set_nullable_{model_name.lower()}_{name}"
             description = f"Set field {name} of {model_name} NULLable"
-        operation = operations.AlterField(model_name, name, field, **kwargs)
+        operation = AlterField(model_name, name, field, stage=Stage.PRE_DEPLOY)
         operation.migration_name_fragment = fragment
         operation.describe = lambda: description
         return operation
@@ -151,7 +145,7 @@ if field_db_default_supported:
     # XXX: Shim kept for historical migrations generated before Django 5.
     PreRemoveField = get_pre_remove_field_operation  # type: ignore[assignment,misc] # noqa: F811
 else:
-    get_pre_remove_field_operation = PreRemoveField  # type: ignore[assignment]
+    get_pre_remove_field_operation = PreRemoveField
 
 
 class AddField(operations.AddField):
@@ -359,3 +353,9 @@ class AlterField(StagedOperation, operations.AlterField):
             stage=stage,
             preserve_default=preserve_default,
         )
+
+    @cached_property
+    def migration_name_fragment(self):
+        # Redefine as a `cached_property` to allow `get_pre_remove_field_operation`
+        # to assign a more appropriate value.
+        return super().migration_name_fragment

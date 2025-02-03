@@ -409,7 +409,12 @@ class PreRemoveFieldTests(OperationTestCase):
                 (
                     "AlterField",
                     [],
-                    {"model_name": model_name, "name": field_name, "field": mock.ANY},
+                    {
+                        "model_name": model_name,
+                        "name": field_name,
+                        "field": mock.ANY,
+                        "stage": Stage.PRE_DEPLOY,
+                    },
                 ),
             )
             self.assertEqual(
@@ -490,3 +495,14 @@ class AlterFieldTests(OperationTestCase):
             operation.field.deconstruct(), models.IntegerField().deconstruct()
         )
         self.assertEqual(operation.stage, Stage.PRE_DEPLOY)
+
+    def test_migration_name_fragment(self):
+        operation = AlterField(
+            "model",
+            "field",
+            models.IntegerField(),
+            Stage.PRE_DEPLOY,
+        )
+        self.assertEqual(operation.migration_name_fragment, "alter_model_field")
+        operation.migration_name_fragment = "alter_what_ever"
+        self.assertEqual(operation.migration_name_fragment, "alter_what_ever")

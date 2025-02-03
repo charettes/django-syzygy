@@ -9,6 +9,7 @@
 - Drop support for Python 3.8.
 - Ensure staged renames and alters are properly serialized. (#52)
 - Address improper handling of rename operation questioning. (#53)
+- Address improper monkey-patching of `AlterField.migration_name_fragment`. (#56)
 
 1.1.0
 =====
