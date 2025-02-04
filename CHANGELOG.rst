@@ -1,7 +1,7 @@
 1.2.0
 =====
 
-:release-date: to-be-released
+:release-date: 2025-02-03
 
 - Add support for MySQL.
 - Adjust `makemigrations` command to take advantage of auto-detector class. (#49)

@@ -6,14 +6,14 @@ with open("README.rst") as file_:
 
 setup(
     name="django-syzygy",
-    version="1.1.0",
+    version="1.2.0",
     description="Deployment aware tooling for Django migrations.",
     long_description=long_description,
     long_description_content_type="text/x-rst",
     url="https://github.com/charettes/django-syzygy",
     author="Simon Charette",
     author_email="charette.s@gmail.com",
-    install_requires=["Django>=3.2"],
+    install_requires=["Django>=4.2"],
     packages=find_packages(exclude=["tests", "tests.*"]),
     license="MIT License",
     classifiers=[
