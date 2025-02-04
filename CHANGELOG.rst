@@ -13,7 +13,7 @@
 
 1.1.0
 =====
-:release-date: 2024-02-20
+:release-date: 2024-05-24
 
 - Address typos in `AmbiguousPlan` error messages.
 - Mention `MIGRATION_STAGES_OVERRIDE` on ambiguous plan involving third party apps.
