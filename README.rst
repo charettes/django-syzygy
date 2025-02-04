@@ -50,6 +50,15 @@ Setup you deployment pipeline to run ``migrate --pre-deploy`` before rolling
 out your code changes and ``migrate`` afterwards to apply the postponed
 migrations.
 
+.. note::
+
+    Adding ``'syzygy'`` to your ``INSTALLED_APPS`` will override the default
+    ``makemigrations`` and ``migrate`` management commands due to the lack
+    of other injection point into the migration framework. If you plan on
+    using this package with other migration related ones you might have to
+    define your own command overrides that inherit from all involved packages
+    ``makemigrations.Command`` and ``migrate.Command`` definitions.
+
 Concept
 -------
 
