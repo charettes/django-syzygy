@@ -218,9 +218,14 @@ class MigrationAutodetector(_MigrationAutodetector):
     def _generate_removed_field(self, app_label, model_name, field_name):
         field = self.from_state.models[app_label, model_name].fields[field_name]
         remove_default = field.default
-        if (remove_default is NOT_PROVIDED and field.null) or getattr(
-            field, "db_default", NOT_PROVIDED
-        ) is not NOT_PROVIDED:
+        if (
+            # Nullable fields will use null if not specified.
+            (remove_default is NOT_PROVIDED and field.null)
+            # Fields with a db_default will use the value if not specified.
+            or getattr(field, "db_default", NOT_PROVIDED) is not NOT_PROVIDED
+            # Many-to-many fields are not backend by concrete columns.
+            or field.many_to_many
+        ):
             return super()._generate_removed_field(app_label, model_name, field_name)
 
         if remove_default is NOT_PROVIDED:

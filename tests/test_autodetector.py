@@ -159,6 +159,19 @@ class AutodetectorTests(AutodetectorTestCase):
             with self.subTest(field=field):
                 self._test_field_removal(field)
 
+    def test_many_to_many_removal(self):
+        from_model = ModelState(
+            "tests", "Model", [("field", models.ManyToManyField("self"))]
+        )
+        to_model = ModelState("tests", "Model", [])
+        changes = self.get_changes([from_model], [to_model])["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
+        self.assertEqual(changes[0].dependencies, [])
+        self.assertEqual(len(changes[0].operations), 1)
+        operation = changes[0].operations[0]
+        self.assertIsInstance(operation, migrations.RemoveField)
+
     def test_nullable_field_removal(self):
         """
         No action required if the field is already NULL'able and doesn't have

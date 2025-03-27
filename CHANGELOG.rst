@@ -1,3 +1,11 @@
+1.2.1
+=====
+
+:release-date: not-released
+
+- Avoid unnecessary prompting for a default value on `ManyToManyField`
+  removals. (#59)
+
 1.2.0
 =====
 
