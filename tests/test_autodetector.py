@@ -25,6 +25,8 @@ from syzygy.operations import (
 )
 from syzygy.plan import get_migration_stage
 
+from .models import Bar
+
 
 class AutodetectorTestCase(TestCase):
     style = color_style()
@@ -53,7 +55,7 @@ class AutodetectorTestCase(TestCase):
 
 
 class AutodetectorTests(AutodetectorTestCase):
-    def _test_field_addition(self, field):
+    def _test_field_addition(self, field, expected_db_default=None):
         from_model = ModelState("tests", "Model", [])
         to_model = ModelState("tests", "Model", [("field", field)])
         changes = self.get_changes([from_model], [to_model])["tests"]
@@ -64,7 +66,10 @@ class AutodetectorTests(AutodetectorTestCase):
         pre_operation = changes[0].operations[0]
         if field_db_default_supported:
             self.assertIsInstance(pre_operation, migrations.AddField)
-            self.assertEqual(pre_operation.field.db_default, field.default)
+            self.assertEqual(
+                pre_operation.field.db_default,
+                expected_db_default or field.get_default(),
+            )
         else:
             self.assertIsInstance(pre_operation, AddField)
         self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
@@ -81,10 +86,33 @@ class AutodetectorTests(AutodetectorTestCase):
         fields = [
             models.IntegerField(default=42),
             models.IntegerField(null=True, default=42),
+            models.IntegerField(default=lambda: 42),
+            # Foreign keys with callable defaults should have their associated
+            # db_default generated with care.
+            (models.ForeignKey("tests.Model", models.CASCADE, default=42), 42),
+            (
+                models.ForeignKey(
+                    "tests.Bar", models.CASCADE, default=lambda: Bar(id=42)
+                ),
+                42,
+            ),
+            (
+                models.ForeignKey(
+                    "tests.bar",
+                    models.CASCADE,
+                    to_field="name",
+                    default=lambda: Bar(id=123, name="bar"),
+                ),
+                "bar",
+            ),
         ]
         for field in fields:
+            if isinstance(field, tuple):
+                field, expected_db_default = field
+            else:
+                expected_db_default = None
             with self.subTest(field=field):
-                self._test_field_addition(field)
+                self._test_field_addition(field, expected_db_default)
 
     def test_many_to_many_addition(self):
         from_model = ModelState("tests", "Model", [])

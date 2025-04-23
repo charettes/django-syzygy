@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 
+from django.db import models
 from django.db.migrations import operations
 from django.db.models.fields import NOT_PROVIDED
 from django.utils.functional import cached_property
@@ -201,7 +202,22 @@ if field_db_default_supported:
                 "Fields with a db_default don't require a pre-deployment operation."
             )
         field = field.clone()
-        field.db_default = field.get_default()
+        if isinstance(field, models.ForeignKey):
+            # XXX: Replicate ForeignKey.get_default() logic in a way that
+            # doesn't require the field references to be pre-emptively
+            # resolved. This will need to be fixed upstream if we ever
+            # implement model state schema alterations.
+            # See  https://code.djangoproject.com/ticket/29898
+            field_default = super(models.ForeignKey, field).get_default()
+            if (
+                isinstance(field_default, models.Model)
+                and field_default._meta.label_lower == field.related_model.lower()
+            ):
+                target_field = field.to_fields[0] or "pk"
+                field_default = getattr(field_default, target_field)
+        else:
+            field_default = field.get_default()
+        field.db_default = field_default
         operation = operations.AddField(model_name, name, field, preserve_default)
         return operation
 

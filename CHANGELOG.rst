@@ -5,6 +5,8 @@
 
 - Avoid unnecessary prompting for a default value on `ManyToManyField`
   removals. (#59)
+- Address a ``makemigration`` crash when adding a ``ForeignKey`` with a
+  callable ``default``. (#60)
 
 1.2.0
 =====
