@@ -1,7 +1,7 @@
 1.2.1
 =====
 
-:release-date: not-released
+:release-date: 2025-04-23
 
 - Avoid unnecessary prompting for a default value on `ManyToManyField`
   removals. (#59)
