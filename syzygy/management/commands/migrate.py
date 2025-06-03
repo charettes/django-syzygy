@@ -233,7 +233,7 @@ class Command(migrate.Command):
             self.stdout.write("Migrations applied by remote party")
         return
 
-    def handle(  # type: ignore
+    def handle(
         self,
         *args,
         stage: Stage,
