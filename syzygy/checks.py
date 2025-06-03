@@ -35,7 +35,6 @@ def check_migrations(app_configs, **kwargs):
             # for example when switching between branches.
             continue
         directory = os.path.dirname(module.__file__)
-
         migration_names = set()
         for name in os.listdir(directory):
             if name.endswith(".py"):
