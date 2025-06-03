@@ -1,3 +1,11 @@
+1.2.2
+=====
+
+:release-date: not-released
+
+- Address crash of system checks when an installed app has an empty
+  `migrations` directory. (#62)
+
 1.2.1
 =====
 
