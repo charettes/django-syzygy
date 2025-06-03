@@ -30,7 +30,12 @@ def check_migrations(app_configs, **kwargs):
         except ImportError:
             # This is not the place to deal with migration issues.
             continue
+        if module.__file__ is None:
+            # Skip empty migration folders, which can happen
+            # for example when switching between branches.
+            continue
         directory = os.path.dirname(module.__file__)
+
         migration_names = set()
         for name in os.listdir(directory):
             if name.endswith(".py"):

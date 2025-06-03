@@ -29,3 +29,10 @@ class ChecksTests(SimpleTestCase):
                 id="migrations.0001",
             ),
         )
+
+    def test_empty_migration_folder(self):
+        with self.settings(MIGRATION_MODULES={"tests": "tests.test_migrations.empty"}):
+            checks = run_checks(
+                app_configs=[apps.get_app_config("tests")], tags={"migrations"}
+            )
+        self.assertEqual(len(checks), 0)
