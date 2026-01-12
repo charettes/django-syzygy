@@ -5,6 +5,8 @@
 
 - Address crash of system checks when an installed app has an empty
   `migrations` directory. (#62)
+- Address a ``makemigration`` crash when removing a ``ForeignKey`` with a
+  ``default`` on Django 5.2+. (#60)
 
 1.2.1
 =====

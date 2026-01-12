@@ -153,7 +153,7 @@ class AutodetectorTests(AutodetectorTestCase):
         self.assertEqual(len(changes), 1)
         self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
 
-    def _test_field_removal(self, field):
+    def _test_field_removal(self, field, expected_db_default=None):
         from_model = ModelState("tests", "Model", [("field", field)])
         to_model = ModelState("tests", "Model", [])
         changes = self.get_changes([from_model], [to_model])["tests"]
@@ -165,7 +165,9 @@ class AutodetectorTests(AutodetectorTestCase):
         if field_db_default_supported:
             self.assertIsInstance(pre_operation, migrations.AlterField)
             if field.has_default():
-                self.assertEqual(pre_operation.field.db_default, 42)
+                self.assertEqual(
+                    pre_operation.field.db_default, expected_db_default or 42
+                )
             else:
                 self.assertIs(pre_operation.field.null, True)
         else:
@@ -182,10 +184,33 @@ class AutodetectorTests(AutodetectorTestCase):
             models.IntegerField(),
             models.IntegerField(default=42),
             models.IntegerField(null=True, default=42),
+            models.IntegerField(null=True, default=lambda: 42),
+            # Foreign keys with callable defaults should have their associated
+            # db_default generated with care.
+            (models.ForeignKey("tests.Model", models.CASCADE, default=42), 42),
+            (
+                models.ForeignKey(
+                    "tests.Bar", models.CASCADE, default=lambda: Bar(id=42)
+                ),
+                42,
+            ),
+            (
+                models.ForeignKey(
+                    "tests.bar",
+                    models.CASCADE,
+                    to_field="name",
+                    default=lambda: Bar(id=123, name="bar"),
+                ),
+                "bar",
+            ),
         ]
         for field in fields:
+            if isinstance(field, tuple):
+                field, expected_db_default = field
+            else:
+                expected_db_default = None
             with self.subTest(field=field):
-                self._test_field_removal(field)
+                self._test_field_removal(field, expected_db_default)
 
     def test_many_to_many_removal(self):
         from_model = ModelState(

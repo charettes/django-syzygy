@@ -122,6 +122,25 @@ class PreRemoveField(operations.AlterField):
         return "Set field %s of %s NULLable" % (self.name, self.model_name)
 
 
+def _get_field_default(field):
+    if isinstance(field, models.ForeignKey):
+        # XXX: Replicate ForeignKey.get_default() logic in a way that
+        # doesn't require the field references to be pre-emptively
+        # resolved. This will need to be fixed upstream if we ever
+        # implement model state schema alterations.
+        # See  https://code.djangoproject.com/ticket/29898
+        field_default = super(models.ForeignKey, field).get_default()
+        if (
+            isinstance(field_default, models.Model)
+            and field_default._meta.label_lower == field.related_model.lower()
+        ):
+            target_field = field.to_fields[0] or "pk"
+            field_default = getattr(field_default, target_field)
+    else:
+        field_default = field.get_default()
+    return field_default
+
+
 if field_db_default_supported:
 
     def get_pre_remove_field_operation(model_name, name, field):
@@ -131,7 +150,7 @@ if field_db_default_supported:
             )
         field = field.clone()
         if field.has_default():
-            field.db_default = field.get_default()
+            field.db_default = _get_field_default(field)
             fragment = f"set_db_default_{model_name.lower()}_{name}"
             description = f"Set database DEFAULT of field {name} on {model_name}"
         else:
@@ -202,22 +221,7 @@ if field_db_default_supported:
                 "Fields with a db_default don't require a pre-deployment operation."
             )
         field = field.clone()
-        if isinstance(field, models.ForeignKey):
-            # XXX: Replicate ForeignKey.get_default() logic in a way that
-            # doesn't require the field references to be pre-emptively
-            # resolved. This will need to be fixed upstream if we ever
-            # implement model state schema alterations.
-            # See  https://code.djangoproject.com/ticket/29898
-            field_default = super(models.ForeignKey, field).get_default()
-            if (
-                isinstance(field_default, models.Model)
-                and field_default._meta.label_lower == field.related_model.lower()
-            ):
-                target_field = field.to_fields[0] or "pk"
-                field_default = getattr(field_default, target_field)
-        else:
-            field_default = field.get_default()
-        field.db_default = field_default
+        field.db_default = _get_field_default(field)
         operation = operations.AddField(model_name, name, field, preserve_default)
         return operation
 
