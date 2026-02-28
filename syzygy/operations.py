@@ -8,6 +8,15 @@ from django.utils.functional import cached_property
 from .compat import field_db_default_supported
 from .constants import Stage
 
+try:
+    from django.contrib.postgres.operations import (
+        AddIndexConcurrently,
+        RemoveIndexConcurrently,
+    )
+except ImportError:
+    AddIndexConcurrently = None  # type: ignore[assignment,misc]
+    RemoveIndexConcurrently = None  # type: ignore[assignment,misc]
+
 
 def _alter_field_db_default_sql_params(schema_editor, model, name, drop=False):
     field = model._meta.get_field(name)
@@ -379,3 +388,32 @@ class AlterField(StagedOperation, operations.AlterField):
         # Redefine as a `cached_property` to allow `get_pre_remove_field_operation`
         # to assign a more appropriate value.
         return super().migration_name_fragment
+
+
+if AddIndexConcurrently is not None:
+
+    class AddIndex(StagedOperation, AddIndexConcurrently):
+        """
+        Subclass of ``AddIndexConcurrently`` that explicitly defines a
+        deployment stage.
+        """
+
+        # XXX: Explicitly define the signature as migration serializer rely on
+        # __init__ introspection to assign the kwargs.
+        def __init__(self, model_name, index, stage):
+            super().__init__(model_name=model_name, index=index, stage=stage)
+
+    class RemoveIndex(StagedOperation, RemoveIndexConcurrently):
+        """
+        Subclass of ``RemoveIndexConcurrently`` that explicitly defines a
+        deployment stage.
+        """
+
+        # XXX: Explicitly define the signature as migration serializer rely on
+        # __init__ introspection to assign the kwargs.
+        def __init__(self, model_name, name, stage):
+            super().__init__(model_name=model_name, name=name, stage=stage)
+
+else:
+    AddIndex = None  # type: ignore[misc]
+    RemoveIndex = None  # type: ignore[misc]

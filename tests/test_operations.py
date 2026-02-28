@@ -14,7 +14,9 @@ from syzygy.autodetector import MigrationAutodetector
 from syzygy.compat import field_db_default_supported
 from syzygy.constants import Stage
 from syzygy.operations import (
+    AddIndex,
     AlterField,
+    RemoveIndex,
     RenameField,
     RenameModel,
     get_post_add_field_operation,
@@ -506,3 +508,20 @@ class AlterFieldTests(OperationTestCase):
         self.assertEqual(operation.migration_name_fragment, "alter_model_field")
         operation.migration_name_fragment = "alter_what_ever"
         self.assertEqual(operation.migration_name_fragment, "alter_what_ever")
+
+
+@skipUnless(AddIndex is not None, "django.contrib.postgres not available")
+class AddIndexTests(OperationTestCase):
+    def test_serialization(self):
+        index = models.Index(fields=["name"], name="idx_name")
+        self.assert_serde_roundtrip_equal(
+            AddIndex("model", index, stage=Stage.POST_DEPLOY)
+        )
+
+
+@skipUnless(RemoveIndex is not None, "django.contrib.postgres not available")
+class RemoveIndexTests(OperationTestCase):
+    def test_serialization(self):
+        self.assert_serde_roundtrip_equal(
+            RemoveIndex("model", "idx_name", stage=Stage.POST_DEPLOY)
+        )

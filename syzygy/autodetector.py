@@ -15,7 +15,9 @@ from .compat import OperationDependency
 from .constants import Stage
 from .exceptions import AmbiguousStage
 from .operations import (
+    AddIndex as StagedAddIndex,
     AlterField,
+    RemoveIndex as StagedRemoveIndex,
     RenameField,
     RenameModel,
     get_post_add_field_operation,
@@ -173,6 +175,58 @@ class MigrationAutodetector(_MigrationAutodetector):
             ].fields[operation.name]
             if from_field.null:
                 operation = AlterField.for_stage(operation, Stage.POST_DEPLOY)
+        if StagedAddIndex is not None and isinstance(operation, operations.AddIndex):
+            print(
+                self.style.WARNING(
+                    "Adding an index to a large table might cause downtime "
+                    "due to table locking.",
+                ),
+                file=sys.stderr,
+            )
+            choice = self.questioner.defaults.get("ask_add_index_concurrent", 1)
+            if self.has_interactive_questionner:
+                choice = self.questioner._choice_input(
+                    "Please choose an appropriate action to take:",
+                    [
+                        "Keep as a regular AddIndex (acquires table lock)",
+                        (
+                            "Convert to AddIndexConcurrently and mark as post-deployment "
+                            "(no lock, PostgreSQL only). "
+                            + self.style.MIGRATE_LABEL(
+                                "This might not work on non-PostgreSQL databases",
+                            )
+                        ),
+                    ],
+                )
+            if choice == 2:
+                operation = StagedAddIndex.for_stage(operation, Stage.POST_DEPLOY)
+        elif StagedRemoveIndex is not None and isinstance(
+            operation, operations.RemoveIndex
+        ):
+            print(
+                self.style.WARNING(
+                    "Removing an index from a large table might cause downtime "
+                    "due to table locking.",
+                ),
+                file=sys.stderr,
+            )
+            choice = self.questioner.defaults.get("ask_remove_index_concurrent", 1)
+            if self.has_interactive_questionner:
+                choice = self.questioner._choice_input(
+                    "Please choose an appropriate action to take:",
+                    [
+                        "Keep as a regular RemoveIndex (acquires table lock)",
+                        (
+                            "Convert to RemoveIndexConcurrently and mark as post-deployment "
+                            "(no lock, PostgreSQL only). "
+                            + self.style.MIGRATE_LABEL(
+                                "This might not work on non-PostgreSQL databases",
+                            )
+                        ),
+                    ],
+                )
+            if choice == 2:
+                operation = StagedRemoveIndex.for_stage(operation, Stage.POST_DEPLOY)
         super().add_operation(app_label, operation, dependencies, beginning)
 
     def _generate_added_field(self, app_label, model_name, field_name):
@@ -368,3 +422,9 @@ class MigrationAutodetector(_MigrationAutodetector):
                     for dependency in migration.dependencies
                     if dependency[0] != STAGE_SPLIT
                 ]
+        # Set atomic = False on migrations containing non-atomic operations.
+        for migration in itertools.chain.from_iterable(self.migrations.values()):
+            if any(
+                getattr(op, "atomic", True) is False for op in migration.operations
+            ):
+                migration.atomic = False

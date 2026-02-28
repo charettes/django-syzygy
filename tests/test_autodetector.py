@@ -17,9 +17,11 @@ from syzygy.constants import Stage
 from syzygy.exceptions import AmbiguousStage
 from syzygy.operations import (
     AddField,
+    AddIndex as StagedAddIndex,
     AlterField,
     PostAddField,
     PreRemoveField,
+    RemoveIndex as StagedRemoveIndex,
     RenameField,
     RenameModel,
 )
@@ -357,6 +359,88 @@ class AutodetectorTests(AutodetectorTestCase):
         self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
         self.assertIsInstance(changes[0].operations[0], migrations.RenameModel)
 
+    @skipUnless(StagedAddIndex is not None, "django.contrib.postgres not available")
+    def test_add_index(self):
+        from_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("name", models.CharField(max_length=100)),
+                ],
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("name", models.CharField(max_length=100)),
+                ],
+                options={
+                    "indexes": [models.Index(fields=["name"], name="test_name_idx")]
+                },
+            ),
+        ]
+        # Default: keep as regular AddIndex.
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], migrations.AddIndex)
+        self.assertNotIsInstance(changes[0].operations[0], StagedAddIndex)
+        # Convert to concurrent.
+        questioner = MigrationQuestioner({"ask_add_index_concurrent": 2})
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], StagedAddIndex)
+        self.assertFalse(changes[0].atomic)
+
+    @skipUnless(StagedRemoveIndex is not None, "django.contrib.postgres not available")
+    def test_remove_index(self):
+        from_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("name", models.CharField(max_length=100)),
+                ],
+                options={
+                    "indexes": [models.Index(fields=["name"], name="test_name_idx")]
+                },
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("name", models.CharField(max_length=100)),
+                ],
+            ),
+        ]
+        # Default: keep as regular RemoveIndex.
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], migrations.RemoveIndex)
+        self.assertNotIsInstance(changes[0].operations[0], StagedRemoveIndex)
+        # Convert to concurrent.
+        questioner = MigrationQuestioner({"ask_remove_index_concurrent": 2})
+        with captured_stderr():
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.POST_DEPLOY)
+        self.assertIsInstance(changes[0].operations[0], StagedRemoveIndex)
+        self.assertFalse(changes[0].atomic)
+
 
 class AutodetectorStageTests(AutodetectorTestCase):
     def test_mixed_stage_same_app(self):
@@ -546,6 +630,106 @@ class InteractiveAutodetectorTests(AutodetectorTestCase):
             ),
             stdout.getvalue(),
         )
+
+    @skipUnless(StagedAddIndex is not None, "django.contrib.postgres not available")
+    def test_add_index(self):
+        from_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("name", models.CharField(max_length=100)),
+                ],
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("name", models.CharField(max_length=100)),
+                ],
+                options={
+                    "indexes": [models.Index(fields=["name"], name="test_name_idx")]
+                },
+            ),
+        ]
+        with captured_stdin() as stdin, captured_stdout() as stdout, captured_stderr() as stderr:
+            questioner = InteractiveMigrationQuestioner()
+            stdin.write("2\n")
+            stdin.seek(0)
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertIn(
+            self.style.WARNING(
+                "Adding an index to a large table might cause downtime "
+                "due to table locking."
+            ),
+            stderr.getvalue(),
+        )
+        self.assertIn(
+            "1) Keep as a regular AddIndex (acquires table lock)",
+            stdout.getvalue(),
+        )
+        self.assertIn(
+            self.style.MIGRATE_LABEL(
+                "This might not work on non-PostgreSQL databases",
+            ),
+            stdout.getvalue(),
+        )
+        self.assertEqual(len(changes), 1)
+        self.assertIsInstance(changes[0].operations[0], StagedAddIndex)
+
+    @skipUnless(StagedRemoveIndex is not None, "django.contrib.postgres not available")
+    def test_remove_index(self):
+        from_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("name", models.CharField(max_length=100)),
+                ],
+                options={
+                    "indexes": [models.Index(fields=["name"], name="test_name_idx")]
+                },
+            ),
+        ]
+        to_models = [
+            ModelState(
+                "tests",
+                "Foo",
+                [
+                    ("id", models.IntegerField(primary_key=True)),
+                    ("name", models.CharField(max_length=100)),
+                ],
+            ),
+        ]
+        with captured_stdin() as stdin, captured_stdout() as stdout, captured_stderr() as stderr:
+            questioner = InteractiveMigrationQuestioner()
+            stdin.write("2\n")
+            stdin.seek(0)
+            changes = self.get_changes(from_models, to_models, questioner)["tests"]
+        self.assertIn(
+            self.style.WARNING(
+                "Removing an index from a large table might cause downtime "
+                "due to table locking."
+            ),
+            stderr.getvalue(),
+        )
+        self.assertIn(
+            "1) Keep as a regular RemoveIndex (acquires table lock)",
+            stdout.getvalue(),
+        )
+        self.assertIn(
+            self.style.MIGRATE_LABEL(
+                "This might not work on non-PostgreSQL databases",
+            ),
+            stdout.getvalue(),
+        )
+        self.assertEqual(len(changes), 1)
+        self.assertIsInstance(changes[0].operations[0], StagedRemoveIndex)
 
     def test_mixed_stage_failure(self):
         from_models = [
