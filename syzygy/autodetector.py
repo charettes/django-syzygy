@@ -186,6 +186,32 @@ class MigrationAutodetector(_MigrationAutodetector):
             or getattr(field, "db_default", NOT_PROVIDED) is not NOT_PROVIDED
         ):
             return
+        if not field.has_default() and field.get_default() is None:
+            if self.has_interactive_questionner:
+                choice = self.questioner._choice_input(
+                    "You are trying to add a non-nullable field '%s' to %s without a default; "
+                    "we can't do that (the database needs something to populate existing rows).\n"
+                    "Please select a fix:" % (field_name, model_name),
+                    [
+                        (
+                            "Provide a one-off default now (will be set at the "
+                            "database level in pre-deployment stage)"
+                        ),
+                        "Quit, and let me add a default in models.py",
+                    ],
+                )
+                if choice == 1:
+                    add_default = self.questioner._ask_default(default="timezone.now")
+                else:
+                    sys.exit(3)
+            else:
+                add_default = self.questioner.defaults.get("ask_auto_now_default")
+                if add_default is None:
+                    sys.exit(3)
+            field = field.clone()
+            field.default = add_default
+            old_add_field.field = field
+            old_add_field.preserve_default = False
         # ... otherwise swap the added operation by an adjusted one.
         add_field = get_pre_add_field_operation(
             old_add_field.model_name,

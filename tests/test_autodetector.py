@@ -10,6 +10,7 @@ from django.db.migrations.questioner import (
 from django.db.migrations.state import ModelState, ProjectState
 from django.test import TestCase
 from django.test.utils import captured_stderr, captured_stdin, captured_stdout
+from django.utils import timezone
 
 from syzygy.autodetector import STAGE_SPLIT, MigrationAutodetector
 from syzygy.compat import field_db_default_supported
@@ -261,6 +262,35 @@ class AutodetectorTests(AutodetectorTestCase):
         self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
         self.assertEqual(changes[0].operations[0].field.default, 42)
         self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
+
+    def test_auto_now_field_addition(self):
+        from_model = ModelState("tests", "Model", [])
+        to_model = ModelState(
+            "tests",
+            "Model",
+            [("updated", models.DateTimeField(auto_now=True))],
+        )
+        questioner = MigrationQuestioner({"ask_auto_now_default": timezone.now})
+        changes = self.get_changes([from_model], [to_model], questioner)["tests"]
+        self.assertEqual(len(changes), 2)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        pre_operation = changes[0].operations[0]
+        if field_db_default_supported:
+            self.assertIsInstance(pre_operation, migrations.AddField)
+            self.assertIsNotNone(pre_operation.field.db_default)
+        else:
+            self.assertIsInstance(pre_operation, AddField)
+        self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
+
+    def test_auto_now_field_addition_no_default_exits(self):
+        from_model = ModelState("tests", "Model", [])
+        to_model = ModelState(
+            "tests",
+            "Model",
+            [("updated", models.DateTimeField(auto_now=True))],
+        )
+        with self.assertRaisesMessage(SystemExit, "3"):
+            self.get_changes([from_model], [to_model])
 
     def test_alter_field_null_to_not_null(self):
         from_model = ModelState(
@@ -582,3 +612,4 @@ class InteractiveAutodetectorTests(AutodetectorTestCase):
             "with non-ambiguous stages.\n 2) Abort `makemigrations`. You'll have to reduce the number of model "
             "changes before running `makemigrations` again.\nSelect an option: ",
         )
+
