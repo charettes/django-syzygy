@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 
 from django.db import models
+from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 from django.db.migrations import operations
 from django.db.models.fields import NOT_PROVIDED
 from django.utils.functional import cached_property
@@ -137,7 +138,7 @@ def _get_field_default(field):
             target_field = field.to_fields[0] or "pk"
             field_default = getattr(field_default, target_field)
     else:
-        field_default = field.get_default()
+        field_default = BaseDatabaseSchemaEditor._effective_default(field)
     return field_default
 
 

@@ -10,6 +10,7 @@ from django.db.migrations.questioner import (
 from django.db.migrations.state import ModelState, ProjectState
 from django.test import TestCase
 from django.test.utils import captured_stderr, captured_stdin, captured_stdout
+from django.utils import timezone
 
 from syzygy.autodetector import STAGE_SPLIT, MigrationAutodetector
 from syzygy.compat import field_db_default_supported
@@ -113,6 +114,24 @@ class AutodetectorTests(AutodetectorTestCase):
                 expected_db_default = None
             with self.subTest(field=field):
                 self._test_field_addition(field, expected_db_default)
+
+    def test_auto_now_field_addition(self):
+        from_model = ModelState("tests", "Model", [])
+        to_model = ModelState(
+            "tests", "Model", [("updated", models.DateTimeField(auto_now=True))]
+        )
+        now = timezone.now()
+        with mock.patch("django.utils.timezone.now", return_value=now):
+            changes = self.get_changes([from_model], [to_model])["tests"]
+        self.assertEqual(len(changes), 2)
+        self.assertEqual(get_migration_stage(changes[0]), Stage.PRE_DEPLOY)
+        pre_operation = changes[0].operations[0]
+        if field_db_default_supported:
+            self.assertIsInstance(pre_operation, migrations.AddField)
+            self.assertEqual(pre_operation.field.db_default, now)
+        else:
+            self.assertIsInstance(pre_operation, AddField)
+        self.assertEqual(get_migration_stage(changes[1]), Stage.POST_DEPLOY)
 
     def test_many_to_many_addition(self):
         from_model = ModelState("tests", "Model", [])

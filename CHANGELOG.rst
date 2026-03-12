@@ -1,3 +1,11 @@
+1.2.3
+=====
+
+:release-date: not-released
+
+- Address an improper pre-deploy migration generation issue on Django 5.2+
+  when adding a field with an implicit default (e.g. ``Field.auto_now``). (#69)
+
 1.2.2
 =====
 
