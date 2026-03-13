@@ -1,7 +1,7 @@
 1.2.3
 =====
 
-:release-date: not-released
+:release-date: 2026-03-13
 
 - Address an improper pre-deploy migration generation issue on Django 5.2+
   when adding a field with an implicit default (e.g. ``Field.auto_now``). (#69)
