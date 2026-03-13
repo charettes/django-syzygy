@@ -207,7 +207,7 @@ class AddField(operations.AddField):
         model = to_state.apps.get_model(app_label, self.model_name)
         if not self.allow_migrate_model(schema_editor.connection.alias, model):
             return
-        # Defer the removal of DEFAUT to `PostAddField`
+        # Defer the removal of DEFAULT to `PostAddField`
         with self._preserve_column_default(schema_editor, model):
             return super().database_forwards(
                 app_label, schema_editor, from_state, to_state
